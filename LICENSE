@@ -1,0 +1,18 @@
+Creative Commons Attribution-NonCommercial 4.0 International Public License
+
+By exercising the Licensed Rights (defined below), You accept and agree to be bound by the terms and conditions of this Creative Commons Attribution-NonCommercial 4.0 International Public License ("Public License"). To the extent this Public License may be interpreted as a contract, You are granted the Licensed Rights in consideration of Your acceptance of these terms and conditions, and the Licensor grants You such rights in consideration of benefits the Licensor receives from making the Licensed Material available under these terms and conditions.
+
+The complete text of the license can be found at: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+### How to Attribute
+
+When you use this work, you must attribute it in the following manner:
+@article{grison2024,
+  title={A Particle Swarm Optimised Independence Estimator for Blind Source Separation of Neurophysiological Time Series},
+  author={Agnese Grison, Alexander Kenneth Clarke, Silvia Muceli, Jaime Ibanez, Aritra Kundu, Dario Farina},
+  journal={Journal Name},
+  year={2024},
+  volume={Volume},
+  pages={Page numbers},
+  publisher={Publisher}
+}

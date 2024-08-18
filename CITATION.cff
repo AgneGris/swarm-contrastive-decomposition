@@ -1,0 +1,54 @@
+# Content: Citation File Format (CFF) file for the software 
+
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Agnese"
+  given-names: "Grison"
+  orcid: "https://orcid.org/0009-0001-5981-3589"
+  email: agnese.grison@outlook.it
+  affiliation: Imperial College London
+- family-names: "Alexander Kenneth"
+  given-names: "Clarke"
+- family-names: "Silvia"
+  given-names: "Muceli"
+- family-names: "Jaime"
+  given-names: "Ibanez"
+- family-names: "Aritra"
+  given-names: "Kundu"
+- family-names: "Dario"
+  given-names: "Farina"
+title: "A Particle Swarm Optimised Independence Estimator for
+  Blind Source Separation of Neurophysiological Time Series"
+version: 
+doi: 
+date-released: 
+url: "https://github.com/AgneGris/swarm-contrastive-decomposition"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Agnese"
+      given-names: "Grison"
+      orcid: "https://orcid.org/0009-0001-5981-3589"
+      email: agnese.grison@outlook.it
+      affiliation: Imperial College London
+    - family-names: "Alexander Kenneth"
+      given-names: "Clarke"
+    - family-names: "Silvia"
+      given-names: "Muceli"
+    - family-names: "Jaime"
+      given-names: "Ibanez"
+    - family-names: "Aritra"
+      given-names: "Kundu"
+    - family-names: "Dario"
+      given-names: "Farina"
+  doi: 
+  journal: "IEEE Transactions on Biomedical Engineering"
+  month: 
+  start:  
+  end:  
+  title: "A Particle Swarm Optimised Independence Estimator for
+  Blind Source Separation of Neurophysiological Time Series"
+  issue: 
+  volume: 
+  year: 2024

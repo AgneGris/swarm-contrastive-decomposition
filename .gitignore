@@ -1,0 +1,19 @@
+# Ignore common files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+
+# ignore pycaches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pkl
+*.npy
+*.mat
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
