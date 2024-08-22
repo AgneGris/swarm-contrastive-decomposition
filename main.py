@@ -13,6 +13,7 @@ set_random_seed(seed=42)
 def train(path):
 
     device = "cuda"
+    acceptance_silhouette = 0.85
     extension_factor = 20
     low_pass_cutoff = 4400
     high_pass_cutoff = 10
@@ -20,12 +21,14 @@ def train(path):
     end_time = -1
     max_iterations = 250
     sampling_frequency = 10240
+    peel_off_window_size = 200
     output_final_source_plot = True
     use_coeff_var_fitness = True
     remove_bad_fr = True
 
     config = Config(
         device=device,
+        acceptance_silhouette=acceptance_silhouette,
         extension_factor=extension_factor,
         low_pass_cutoff=low_pass_cutoff,
         high_pass_cutoff=high_pass_cutoff,
@@ -33,6 +36,7 @@ def train(path):
         start_time=start_time,
         end_time=end_time,
         max_iterations=max_iterations,
+        peel_off_window_size=peel_off_window_size,
         output_final_source_plot=output_final_source_plot,
         use_coeff_var_fitness=use_coeff_var_fitness,
         remove_bad_fr=remove_bad_fr,

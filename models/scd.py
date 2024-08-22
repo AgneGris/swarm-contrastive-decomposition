@@ -400,7 +400,9 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                     .numpy()
                     .copy()[:, [self.best_exp_idx_list[-1].item()]]
                 )
-                self.decomp["source"].append(self.data.global_best["source"].detach().cpu().numpy().copy())
+                self.decomp["source"].append(
+                    self.data.global_best["source"].detach().cpu().numpy().copy()
+                )
 
             elif source_type == "repeat":
                 patience += 1

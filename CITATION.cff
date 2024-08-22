@@ -21,7 +21,7 @@ authors:
 title: "A Particle Swarm Optimised Independence Estimator for
   Blind Source Separation of Neurophysiological Time Series"
 version: 
-doi: 
+doi: 10.1109/TBME.2024.3446806
 date-released: 
 url: "https://github.com/AgneGris/swarm-contrastive-decomposition"
 preferred-citation:
@@ -42,7 +42,7 @@ preferred-citation:
       given-names: "Kundu"
     - family-names: "Dario"
       given-names: "Farina"
-  doi: 
+  doi: 10.1109/TBME.2024.3446806
   journal: "IEEE Transactions on Biomedical Engineering"
   month: 
   start:  
