@@ -47,6 +47,7 @@ class Config:
     peel_off_window_size: int = 200
     peel_off_repeats: bool = True
     remove_bad_fr: bool = True
+    clamp_percentile: Optional[float] = None
 
     # ICA parameters
     max_ica_steps: int = 1000
