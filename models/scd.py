@@ -80,7 +80,23 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         """Apply separation vectors to emg to get sources"""
 
         sources = torch.matmul(self.data.emg, self.data.ica_weights)
-        return ((sources - sources.mean(0)) / sources.std(0)).clamp(max=30)
+        sources = (sources - sources.mean(0)) / sources.std(0)
+
+        # Clamp sources to avoid outlying spikes
+        if self.config.clamp_percentile:
+            min_per = sources.quantile(1 - self.config.clamp_percentile, dim=0)
+            max_per = sources.quantile(self.config.clamp_percentile, dim=0)
+
+            # Use the standard deviation to detect large spikes
+            if (sources.max() - sources.min()) > 5 * sources.std():
+                sources = sources.clamp(min=min_per, max=max_per)
+            else:
+                sources = sources.clamp(max=30)
+            
+        else:
+            sources = sources.clamp(max=30)
+
+        return sources
 
     def ica_step(self):
         """Calculate ICA loss with nonlinearity"""
