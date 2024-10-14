@@ -60,13 +60,11 @@ Follow these steps to set up the project locally:
      - **`end_time`**: Set the end time for signal trimming. Use `-1` to include the entire signal until the end.
      - **`max_iterations`**: Specify the maximum number of iterations for the decomposition process.
      - **`sampling_frequency`**: Indicate the sampling frequency of your signal.
-     - **`peel_off_window_size`**: Define the size of the window (in samples) for the spike-triggered average of the source.
+     - **`peel_off_window_size`**: Define the size of the window (in ms) for the spike-triggered average of the source.
      - **`output_final_source_plot`**: Set to `True` to generate a plot of the final source, or `False` to skip plotting.
      - **`use_coeff_var_fitness`**: Set to `True` if consistent activity is expected in discharge times (recommended for most EMGs); set to `False` for other types of data (e.g., intracortical).
      - **`remove_bad_fr`**: Set to `True` to filter out sources with firing rates below 2 Hz or above 100 Hz. You can adjust these thresholds in `models\scd.py` if needed.
    - Other configuration parameters are found in `config\structures`. 
-
-   Note: all parameters related to **time** are specified in samples.
 
 4. **Run the Decomposition:**
    - Once your data is properly loaded and configured, run the following command to start the decomposition process:

@@ -44,10 +44,10 @@ class Config:
     iteration_patience: int = 20
     acceptance_silhouette: float = 0.85
     acceptance_max_roa: float = 30
-    peel_off_window_size: int = 200
+    peel_off_window_size_ms: int = 20
     peel_off_repeats: bool = True
     remove_bad_fr: bool = True
-    clamp_percentile: Optional[float] = None
+    clamp_percentile: bool = True
 
     # ICA parameters
     max_ica_steps: int = 1000
@@ -75,8 +75,8 @@ class Config:
     use_pairwise_silhouette: bool = False
     use_mean_when_clustering: bool = False
     min_peaks_in_source: int = 15
-    roa_tolerance: int = 5
-    roa_max_shift: int = 300
+    roa_tolerance_ms: float = 0.5   # ms
+    roa_max_shift_ms: int = 30      # ms
 
     # Plotting and verbosity
     output_source_plot: bool = False
@@ -84,7 +84,18 @@ class Config:
     verbose_mode: bool = True
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
+    @property
+    def peel_off_window_size(self) -> int:
+        return int(self.peel_off_window_size_ms * self.sampling_frequency / 1000)
 
+    @property
+    def roa_tolerance(self) -> int:
+        return int(self.roa_tolerance_ms * self.sampling_frequency / 1000)
+
+    @property
+    def roa_max_shift(self) -> int:
+        return int(self.roa_max_shift_ms * self.sampling_frequency / 1000)
+    
 @dataclass
 class Data:
     emg: torch.Tensor

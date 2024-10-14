@@ -21,7 +21,7 @@ def train(path):
     end_time = -1
     max_iterations = 250
     sampling_frequency = 10240
-    peel_off_window_size = 200
+    peel_off_window_size_ms = 20   # ms
     output_final_source_plot = True
     use_coeff_var_fitness = True
     remove_bad_fr = True
@@ -36,7 +36,7 @@ def train(path):
         start_time=start_time,
         end_time=end_time,
         max_iterations=max_iterations,
-        peel_off_window_size=peel_off_window_size,
+        peel_off_window_size_ms=peel_off_window_size_ms,
         output_final_source_plot=output_final_source_plot,
         use_coeff_var_fitness=use_coeff_var_fitness,
         remove_bad_fr=remove_bad_fr,
