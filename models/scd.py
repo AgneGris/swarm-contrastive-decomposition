@@ -88,7 +88,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             max_per = sources.quantile(self.config.clamp_percentile, dim=0)
 
             # Use the standard deviation to detect large spikes
-            if (sources.max() - sources.min()) > 5 * sources.std():
+            if (sources.max() - sources.min()) > 3 * sources.std():
                 sources = sources.clamp(min=min_per, max=max_per)
             else:
                 sources = sources.clamp(max=30)
