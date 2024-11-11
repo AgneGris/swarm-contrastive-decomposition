@@ -18,7 +18,6 @@ dependencies:
       - easydict==1.13
       - h5py==3.10.0
       - hdmf==3.11.0
-      - jpca==0.0.1
       - mat73==0.62
       - pynwb==2.5.0
       - ruamel-yaml==0.18.5
