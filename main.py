@@ -25,6 +25,7 @@ def train(path):
     output_final_source_plot = True
     use_coeff_var_fitness = True
     remove_bad_fr = True
+    clamp_percentile = None  # until better way to handle this is found
 
     config = Config(
         device=device,
@@ -40,6 +41,7 @@ def train(path):
         output_final_source_plot=output_final_source_plot,
         use_coeff_var_fitness=use_coeff_var_fitness,
         remove_bad_fr=remove_bad_fr,
+        clamp_percentile=clamp_percentile,
     )
 
     # Load data
