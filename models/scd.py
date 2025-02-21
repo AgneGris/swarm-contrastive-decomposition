@@ -8,6 +8,8 @@ from processing.preprocess import (
     whiten,
     autocorrelation_whiten,
     extend,
+    time_differentiate,
+    notch_filter,
     low_pass_filter,
     high_pass_filter,
 )
@@ -37,7 +39,19 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
         """Applies preprocessing steps to emg as specified by config"""
 
-        # First apply a low pass filter
+        # First apply a notch filter
+        if self.config.notch_params is not None:
+            assert (
+                self.config.sampling_frequency is not None
+            ), "Sampling frequency must be set in config if filtering."
+            emg = notch_filter(
+                emg,
+                self.config.sampling_frequency,
+                self.config.notch_params,
+                self.config.low_pass_cutoff,
+            )
+
+        # Then a low pass
         if self.config.low_pass_cutoff is not None:
             assert (
                 self.config.sampling_frequency is not None
@@ -48,7 +62,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 self.config.low_pass_cutoff,
             )
 
-        # Then a high pass
+        # Finally a high pass
         if self.config.high_pass_cutoff is not None:
             assert (
                 self.config.sampling_frequency is not None
@@ -58,6 +72,10 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 self.config.sampling_frequency,
                 self.config.high_pass_cutoff,
             )
+
+        # Apply time differentiation
+        if self.config.time_differentiate:
+            emg = time_differentiate(emg)
 
         # Extend the emg to approx an instantaneous source separation problem
         emg = extend(emg, self.config.extension_factor)

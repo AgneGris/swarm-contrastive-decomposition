@@ -15,6 +15,8 @@ def train(path):
     device = "cuda"
     acceptance_silhouette = 0.85
     extension_factor = 20
+    time_differentiate = False
+    notch_params = [50, 1.0, True] # powerline frequency, bandwidth, filter harmonics
     low_pass_cutoff = 4400
     high_pass_cutoff = 10
     start_time = 0
@@ -31,6 +33,8 @@ def train(path):
         device=device,
         acceptance_silhouette=acceptance_silhouette,
         extension_factor=extension_factor,
+        time_differentiate=time_differentiate,
+        notch_params=notch_params,
         low_pass_cutoff=low_pass_cutoff,
         high_pass_cutoff=high_pass_cutoff,
         sampling_frequency=sampling_frequency,
@@ -58,9 +62,10 @@ def train(path):
             "Data format not supported. Please provide data in .mat or .npy format."
         )
 
-    neural_data = neural_data[
-        config.start_time * sampling_frequency : config.end_time * sampling_frequency, :
-    ]
+    if config.end_time == -1:
+        neural_data = neural_data[config.start_time * sampling_frequency : , :]
+    else:
+        neural_data = neural_data[config.start_time * sampling_frequency : config.end_time * sampling_frequency, :]
 
     # Initiate the model and run
     model = SwarmContrastiveDecomposition()
