@@ -16,4 +16,7 @@ __pycache__/
 *.mat
 
 # Ignore Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+.ipynb_checkpoints
+
+# Ignore venv folder
+venv/

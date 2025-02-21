@@ -1,6 +1,6 @@
 """Dataclass structure for configuration and model data containers"""
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 from dataclasses import dataclass
 
 import torch
@@ -33,6 +33,8 @@ class Config:
 
     # EMG preprocessing parameters
     sampling_frequency: Optional[int] = None
+    time_differentiate: Optional[bool] = None
+    notch_params: Optional[Tuple[int, float, bool]] = None  # powerline frequency, bandwidth, harmonics
     low_pass_cutoff: Optional[int] = None
     high_pass_cutoff: Optional[int] = None
     extension_factor: int = 100

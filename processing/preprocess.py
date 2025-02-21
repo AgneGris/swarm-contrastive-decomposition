@@ -7,6 +7,28 @@ from config.structures import set_random_seed
 
 set_random_seed(seed=42)
 
+def notch_filter(emg: torch.Tensor, f_samp: float, notch_params: tuple, cutoff_lowpass: int):
+    """Filter emg channel by channel"""
+
+    keep = torch.zeros(1).type_as(emg)
+    emg = emg.cpu().numpy()
+
+    f_notch, bw, filt_harms = notch_params
+
+    # Select the frequencies to filter
+    freqs_to_filter = [f_notch] # base frequency (e.g. 50 Hz for powerline noise in Europe)
+
+    if filt_harms:
+        freqs_to_filter.extend([f_notch * i for i in range(2, cutoff_lowpass // f_notch + 1)]) # harmonics up to the low pass cutoff
+
+    # Filter
+    for f in freqs_to_filter:
+        b, a = butter(2, [2 * (f - bw) / f_samp, 2 * (f + bw) / f_samp], btype="bandstop")
+        for channel in range(emg.shape[1]):
+            emg[:, channel] = filtfilt(b, a, emg[:, channel])
+
+    return torch.from_numpy(emg).type_as(keep)
+
 
 def high_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int):
     """Filter emg channel by channel"""
@@ -33,6 +55,20 @@ def low_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int):
 
     return torch.from_numpy(emg).type_as(keep)
 
+def time_differentiate(emg: torch.Tensor) -> torch.Tensor:
+    """
+    Perform time differentiation of emg channel by channel
+
+    Apply when the number of active sources is high to suppress small
+    ones and improve discrimination between active sources
+    """
+    # Differentiate the signal
+    emg = emg[1:] - emg[:-1]
+    
+    # Duplicate the first sample of each channel back to maintain the original shape
+    emg = torch.cat((emg[:1], emg), dim=0)
+
+    return emg
 
 def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
     """Extends each sample with factor past values"""
