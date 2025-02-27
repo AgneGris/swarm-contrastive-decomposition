@@ -108,5 +108,5 @@ If you use this code in your research, please cite our paper:
 For any questions or inquiries, please contact us at:
 ```sh
 Agnese Grison
-agnese.grison@outlook.it
+agnese.grison16@imperial.ac.uk
 ```

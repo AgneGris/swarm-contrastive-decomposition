@@ -27,7 +27,7 @@ def train(path):
     output_final_source_plot = True
     use_coeff_var_fitness = True
     remove_bad_fr = True
-    clamp_percentile = None  # until better way to handle this is found
+    clamp_percentile = 0.999  
 
     config = Config(
         device=device,
@@ -75,7 +75,7 @@ def train(path):
 
 
 if __name__ == "__main__":
-    # Uncomment the next three lines to run in interactive window
+    # # Uncomment the next three lines to run in interactive window
     # import sys
     # sys.argv=['']
     # del sys
@@ -83,11 +83,13 @@ if __name__ == "__main__":
     HOME = Path.cwd().joinpath("data", "input")
     file_name = "emg"
     path = HOME.joinpath(file_name).with_suffix(".npy")
+
     output_path = (
         Path(str(HOME).replace("input", "output"))
         .joinpath(file_name)
         .with_suffix(".pkl")
     )
+    output_path = HOME.joinpath(file_name).with_suffix(".pkl")
 
     dictionary, _ = train(path)
 

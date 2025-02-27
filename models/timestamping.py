@@ -165,10 +165,13 @@ def source_to_timestamps(
             else centroid_silhouette(heights.squeeze(), centroids)
         )
 
-        return locations[distances.argmin(1) == centroids.argmax()], silhouette
+        locations = locations[distances.argmin(1) == centroids.argmax()]
+
+        return locations, source[locations], silhouette
 
     else:
-        return torch.tensor([]).type_as(heights), torch.tensor(0.0).type_as(heights)
+        return torch.tensor([]).type_as(heights), torch.tensor(0.0).type_as(heights), torch.tensor(0.0).type_as(heights)
+
 
 
 def spike_triggered_average(

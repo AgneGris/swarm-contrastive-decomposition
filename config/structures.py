@@ -150,6 +150,10 @@ class Data:
             "exponents": self.exponents,
             "silhouettes": torch.zeros_like(self.exponents),
             "fitness": torch.zeros_like(self.exponents),
+            "spike_heights": torch.zeros_like(self.exponents),
+            "spike_means": torch.zeros_like(self.exponents),
+            "spike_stds": torch.zeros_like(self.exponents),
+            "spike_outliers": torch.zeros_like(self.exponents),
         }
         self.global_best = {
             "exponents": self.exponents[0],

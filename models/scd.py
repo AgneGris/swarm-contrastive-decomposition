@@ -102,14 +102,20 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
         # Clamp sources to avoid outlying spikes
         if self.config.clamp_percentile:
-            min_per = sources.quantile(1 - self.config.clamp_percentile, dim=0)
-            max_per = sources.quantile(self.config.clamp_percentile, dim=0)
 
-            # Use the standard deviation to detect large spikes
-            if (sources.max() - sources.min()) > 3 * sources.std():
-                sources = sources.clamp(min=min_per, max=max_per)
-            else:
+            if torch.all(self.data.personal_best['spike_heights'] == 0):
                 sources = sources.clamp(max=30)
+            else:
+                for s in range(sources.shape[1]):
+                    if self.data.personal_best['spike_outliers'][s]:
+                        thr = self.data.personal_best['spike_heights'][s]
+                        mu = self.data.personal_best['spike_means'][s]
+                        std = self.data.personal_best['spike_stds'][s]
+                        if torch.isnan(std):
+                            std = 0.5
+                        sources[sources[:,s] > thr, s] = mu + torch.randn_like(sources[sources[:,s] > thr, s]) * std
+                    else:
+                        sources[sources[:,s] > 30, s] = 30
             
         else:
             sources = sources.clamp(max=30)
@@ -215,7 +221,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         and aggregate. Calculates a fitness function for the swarm."""
 
         # Calculate timestamps from k means with associated silhouettes
-        timestamps, silhouettes = zip(
+        timestamps, spike_heights, silhouettes = zip(
             *[
                 (
                     source_to_timestamps(
@@ -229,14 +235,14 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             ]
         )
 
-        return timestamps, silhouettes
+        return timestamps, spike_heights, silhouettes
 
     def reset_swarm_and_ica(self) -> None:
         """Does a swarm update and then resets the ICA parameters with STA"""
 
         # First get the timestamps and silhouettes
         sources = self.calculate_sources()
-        timestamps, silhouettes = self.calculate_timestamps(
+        timestamps, spike_heights, silhouettes = self.calculate_timestamps(
             sources, self.config.reset_peak_separation
         )
 
