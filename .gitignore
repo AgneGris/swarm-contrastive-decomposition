@@ -1,3 +1,9 @@
+*.egg-info/
+build/
+dist/
+__pycache__/
+*.pyc
+
 # Ignore common files
 .DS_Store
 Thumbs.db
