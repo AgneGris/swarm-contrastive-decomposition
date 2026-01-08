@@ -1,14 +1,20 @@
 # Swarm-Contrastive Decomposition 🧠
 
 ## Overview 📝
-Welcome to the Swarm-Contrastive Decomposition project! This repository contains the code of our research paper on decomposition of Neurophysiological Time Series signals. The primary goal of this project is to provide an open-source implementation for fostering further research in this area.
+
+A Python package for decomposition of neurophysiological time series signals using a Particle Swarm Optimised Independence Estimator for Blind Source Separation.
+
 <div align="center">
-    <img src="images/pipeline.png" alt="Pipeline" width="400"/>
+    <img src="images/pipeline.png" alt="Pipeline" width="500"/>
 </div>
 
 ## Table of Contents 📚
+
 - [Installation](#installation)
-- [How to use this repository](#howtousetherepo)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Test Data](#test-data)
 - [Contributing](#contributing)
 - [License](#license)
 - [Citation](#citation)
@@ -17,80 +23,212 @@ Welcome to the Swarm-Contrastive Decomposition project! This repository contains
 ## Installation 🛠️
 
 ### Prerequisites
-Make sure you have the following software and libraries installed:
-- Python 3.10 🐍
-- NumPy 📦
-- PyTorch 🔥
 
-### Steps
-Follow these steps to set up the project locally:
+- Python 3.10+
+- PyTorch with CUDA support (recommended)
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/AgneGris/swarm-contrastive-decomposition
-    ```
-2. Navigate to the project directory:
-    ```sh
-    cd swarm-contrastive-decomposition
-    ```
-3. Create the conda environment from the `decomposition.yml` file:
-    ```sh
-    conda env create -f decomposition.yml
-    ```
-4. Activate the environment:
-    ```sh
-    conda activate decomposition
-    ```
+### Option 1: Install as a Package (Recommended)
 
-## How to use this repository 🚀
-1. **Upload Your Input Data:**
-   - Place your input data files in the `data/input` folder.
+```bash
+# Clone the repository
+git clone https://github.com/AgneGris/swarm-contrastive-decomposition
+cd swarm-contrastive-decomposition
 
-2. **Modify Data Loading:**
-   - Depending on your data structure, you may need to adjust the data loading logic in `main.py` (lines 41-53).
+# Install the package
+pip install -e .
+```
 
-3. **Configure the Parameters:**
-   - Customize the configuration settings in `main.py` according to your needs:
-     - **`device`**: Set to `"cuda"` for GPU or `"cpu"` for CPU.
-     - **`acceptance_silhouette`**: Define the acceptance threshold for source quality.
-     - **`extension_factor`**: This factor typically equals `1000 / number of channels`. A higher value may improve results.
-     - **`low_pass_cutoff`**: Define the cutoff frequency for the low-pass filter.
-     - **`high_pass_cutoff`**: Define the cutoff frequency for the high-pass filter.
-     - **`start_time`**: Set the start time for signal trimming. Use `0` to include the entire signal from the beginning.
-     - **`end_time`**: Set the end time for signal trimming. Use `-1` to include the entire signal until the end.
-     - **`max_iterations`**: Specify the maximum number of iterations for the decomposition process.
-     - **`sampling_frequency`**: Indicate the sampling frequency of your signal.
-     - **`peel_off_window_size`**: Define the size of the window (in ms) for the spike-triggered average of the source.
-     - **`output_final_source_plot`**: Set to `True` to generate a plot of the final source, or `False` to skip plotting.
-     - **`use_coeff_var_fitness`**: Set to `True` if consistent activity is expected in discharge times (recommended for most EMGs); set to `False` for other types of data (e.g., intracortical).
-     - **`remove_bad_fr`**: Set to `True` to filter out sources with firing rates below 2 Hz or above 100 Hz. You can adjust these thresholds in `models\scd.py` if needed.
-   - Other configuration parameters are found in `config\structures`. 
+### Option 2: Using Conda Environment
 
-4. **Run the Decomposition:**
-   - Once your data is properly loaded and configured, run the following command to start the decomposition process:
-     ```bash
-     python main.py
-     ``` 
-   - Once the decomposition process has terminated, the output data will be saved in the `data/output` folder.
+```bash
+# Clone the repository
+git clone https://github.com/AgneGris/swarm-contrastive-decomposition
+cd swarm-contrastive-decomposition
+
+# Create conda environment
+conda env create -f decomposition.yml
+conda activate decomposition
+
+# Install the package
+pip install -e .
+```
+
+### Verify Installation
+
+```bash
+python -c "import scd; print(f'SCD version: {scd.__version__}')"
+```
+
+## Quick Start 🚀
+
+```python
+import scd
+
+# Train with default configuration
+dictionary, timestamps = scd.train("data/input/emg.npy")
+
+# Save results
+scd.save_results("data/output/emg.pkl", dictionary)
+```
+
+## Usage
+
+### Basic Usage
+
+```python
+import scd
+
+# Use a predefined configuration
+dictionary, timestamps = scd.train(
+    "path/to/your/data.mat",
+    config_name="surface"  # or "default", "intramuscular"
+)
+
+scd.save_results("output.pkl", dictionary)
+```
+
+### With Configuration Overrides
+
+```python
+import scd
+
+# Override specific parameters
+dictionary, timestamps = scd.train(
+    "data/input/emg.npy",
+    config_name="surface",
+    max_iterations=100,  # override for quick testing
+    output_final_source_plot=True
+)
+```
+
+### Step-by-Step Control
+
+```python
+import scd
+
+# Load configuration
+config = scd.load_config("surface")
+
+# Load data
+neural_data = scd.load_data("data/input/emg.npy", device=config.device)
+
+# Preprocess
+neural_data = scd.preprocess_data(neural_data, config)
+
+# Train model
+dictionary, timestamps = scd.train_model(neural_data, config)
+
+# Save results
+scd.save_results("output.pkl", dictionary)
+```
+
+### Supported Data Formats
+
+- `.mat` — MATLAB files (specify the variable name with `key` parameter)
+- `.npy` — NumPy arrays
+
+```python
+# For .mat files with custom variable name
+dictionary, timestamps = scd.train("data.mat", key="emg_data")
+
+# For .npy files
+dictionary, timestamps = scd.train("data.npy")
+```
+
+Data should have shape `(time, channels)` or `(channels, time)` — the loader will automatically transpose if needed.
+
+## Configuration ⚙️
+
+Configurations are defined in `scd/configs.json`. Available presets:
+
+| Config Name | Use Case | Sampling Rate | Description |
+|-------------|----------|---------------|-------------|
+| `default` | General purpose | 10240 Hz | Balanced settings for most EMG data |
+| `surface` | Surface EMG | 10240 Hz | Optimized for surface recordings |
+| `intramuscular` | Intramuscular EMG | 10240 Hz | Higher iterations for fine-wire recordings |
+
+### Configuration Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `device` | `"cuda"` for GPU or `"cpu"` | `"cuda"` |
+| `acceptance_silhouette` | Quality threshold for source acceptance | `0.85` |
+| `extension_factor` | Typically `1000 / num_channels`. Higher values may improve results | `25` |
+| `low_pass_cutoff` | Low-pass filter cutoff frequency (Hz) | `4400` |
+| `high_pass_cutoff` | High-pass filter cutoff frequency (Hz) | `10` |
+| `sampling_frequency` | Sampling frequency of your signal (Hz) | `10240` |
+| `start_time` | Start time for signal trimming (s). Use `0` for beginning | `0` |
+| `end_time` | End time for signal trimming (s). Use `-1` for entire signal | `-1` |
+| `max_iterations` | Maximum decomposition iterations | `200` |
+| `peel_off_window_size_ms` | Window size for spike-triggered average (ms) | `20` |
+| `output_final_source_plot` | Generate plot of final sources | `false` |
+| `use_coeff_var_fitness` | Use coefficient of variation fitness. `true` for EMG, `false` for intracortical | `true` |
+| `remove_bad_fr` | Filter sources with firing rates < 2 Hz or > 100 Hz | `true` |
+| `clamp_percentile` | Percentile for amplitude clamping | `0.999` |
+
+### Custom Configuration
+
+Add your own configuration to `scd/configs.json`:
+
+```json
+{
+    "my_experiment": {
+        "device": "cuda",
+        "acceptance_silhouette": 0.80,
+        "extension_factor": 30,
+        "sampling_frequency": 2048,
+        ...
+    }
+}
+```
+
+Then use it:
+
+```python
+dictionary, timestamps = scd.train("data.mat", config_name="my_experiment")
+```
+
+## Test Data 🧪
+
+The repository includes test data to verify your installation:
+
+- **File:** `data/input/emg.npy`
+- **Type:** Surface EMG
+- **Sampling rate:** 10240 Hz
+- **Configuration:** Use `"surface"` config
+
+```python
+import scd
+
+# Run with test data
+dictionary, timestamps = scd.train(
+    "data/input/emg.npy",
+    config_name="surface"
+)
+
+print(f"Found {len(dictionary)} motor units")
+```
 
 ## Contributing 🤝
-We welcome contributions! Here’s how you can contribute:
 
-1. Fork the repository.
-2. Create a feature branch (git checkout -b feature/newfeature).
-3. Commit your changes (git commit -m 'Add some newfeature').
-4. Push to the branch (git push origin feature/newfeature).
-5. Open a pull request.
+We welcome contributions! Here's how you can contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/newfeature`)
+3. Commit your changes (`git commit -m 'Add some newfeature'`)
+4. Push to the branch (`git push origin feature/newfeature`)
+5. Open a pull request
 
 ## License 📜
+
 This project is licensed under the CC BY-NC 4.0 License.
 
 ## Citation
 
 If you use this code in your research, please cite our paper:
 
-```sh
-@article{10643350,
+```bibtex
+@article{grison2024particle,
   author={Grison, Agnese and Clarke, Alexander Kenneth and Muceli, Silvia and Ibáñez, Jaime and Kundu, Aritra and Farina, Dario},
   journal={IEEE Transactions on Biomedical Engineering}, 
   title={A Particle Swarm Optimised Independence Estimator for Blind Source Separation of Neurophysiological Time Series}, 
@@ -98,15 +236,14 @@ If you use this code in your research, please cite our paper:
   volume={},
   number={},
   pages={1-11},
-  keywords={Recording;Time series analysis;Sorting;Vectors;Measurement;Electrodes;Probes;Independent component analysis;particle swarm optimisation;blind source separation;intramuscular electromyography;intracortical recording},
-  doi={10.1109/TBME.2024.3446806}}
-
+  doi={10.1109/TBME.2024.3446806},
+  keywords={Recording; Time series analysis; Sorting; Vectors; Measurement; Electrodes; Probes; Independent component analysis; particle swarm optimisation; blind source separation; intramuscular electromyography; intracortical recording}
+}
 ```
 
 ## Contact
 
-For any questions or inquiries, please contact us at:
-```sh
-Agnese Grison
-agnese.grison16@imperial.ac.uk
-```
+For questions or inquiries:
+
+**Agnese Grison**  
+📧 agnese.grison16@imperial.ac.uk

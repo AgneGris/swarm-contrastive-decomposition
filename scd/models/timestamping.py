@@ -5,7 +5,7 @@ from typing import Tuple, List
 
 import torch
 from scipy.signal import find_peaks
-from config.structures import set_random_seed
+from scd.config.structures import set_random_seed
 
 set_random_seed(seed=42)
 

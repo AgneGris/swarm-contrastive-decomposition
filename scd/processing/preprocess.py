@@ -3,7 +3,7 @@
 import torch
 from scipy.signal import butter, filtfilt
 
-from config.structures import set_random_seed
+from scd.config.structures import set_random_seed
 
 set_random_seed(seed=42)
 

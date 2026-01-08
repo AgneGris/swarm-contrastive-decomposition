@@ -3,8 +3,8 @@
 from typing import Optional, List, Tuple, Dict
 import torch
 
-from config.structures import Config, Data
-from processing.preprocess import (
+from scd.config.structures import Config, Data
+from scd.processing.preprocess import (
     whiten,
     autocorrelation_whiten,
     extend,
@@ -13,7 +13,7 @@ from processing.preprocess import (
     low_pass_filter,
     high_pass_filter,
 )
-from models.timestamping import (
+from scd.models.timestamping import (
     source_to_timestamps,
     spike_triggered_average,
     peel_off_source,
@@ -22,8 +22,8 @@ from models.timestamping import (
     calculate_firing_rates,
 )
 
-from utils.plotting import plot_accepted_source, plot_sources
-from config.structures import set_random_seed
+from scd.utils.plotting import plot_accepted_source, plot_sources
+from scd.config.structures import set_random_seed
 
 set_random_seed(seed=42)
 

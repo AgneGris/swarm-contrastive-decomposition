@@ -1,0 +1,51 @@
+{
+    "default": {
+        "device": "cuda",
+        "acceptance_silhouette": 0.85,
+        "extension_factor": 25,
+        "low_pass_cutoff": 4400,
+        "high_pass_cutoff": 10,
+        "sampling_frequency": 10240,
+        "start_time": 0,
+        "end_time": -1,
+        "max_iterations": 200,
+        "peel_off_window_size_ms": 20,
+        "output_final_source_plot": false,
+        "use_coeff_var_fitness": true,
+        "remove_bad_fr": true,
+        "clamp_percentile": 0.999
+    },
+    "intramuscular": {
+        "device": "cuda",
+        "acceptance_silhouette": 0.85,
+        "extension_factor": 20,
+        "low_pass_cutoff": 4400,
+        "high_pass_cutoff": 10,
+        "sampling_frequency": 10240,
+        "start_time": 0,
+        "end_time": -1,
+        "max_iterations": 250,
+        "peel_off_window_size_ms": 20,
+        "output_final_source_plot": true,
+        "use_coeff_var_fitness": true,
+        "remove_bad_fr": true,
+        "clamp_percentile": 0.999
+    },
+    "surface": {
+        "device": "cuda",
+        "acceptance_silhouette": 0.80,
+        "extension_factor": 5,
+        "low_pass_cutoff": 500,
+        "high_pass_cutoff": 20,
+        "sampling_frequency": 10240,
+        "start_time": 0,
+        "end_time": -1,
+        "max_iterations": 10,
+        "peel_off_window_size_ms": 25,
+        "output_final_source_plot": true,
+        "use_coeff_var_fitness": true,
+        "remove_bad_fr": true,
+        "clamp_percentile": 0.999,
+        "bad_channels": [56]
+    }
+}

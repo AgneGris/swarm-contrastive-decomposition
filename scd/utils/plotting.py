@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config.structures import set_random_seed
+from scd.config.structures import set_random_seed
 
 plt.rcParams["pdf.fonttype"] = 42
 set_random_seed(seed=42)

@@ -40,6 +40,7 @@ class Config:
     extension_factor: int = 100
     whitening_method: str = "zca"
     autocorrelation_whiten: bool = False
+    bad_channels: Optional[Sequence[int]] = None
 
     # Main run parameters
     max_iterations: int = 250

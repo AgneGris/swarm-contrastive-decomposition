@@ -1,0 +1,10 @@
+numpy>=1.20.0
+torch>=1.9.0
+scipy>=1.7.0
+h5py>=3.0.0
+mat73>=0.59
+matplotlib>=3.5.0
+
+[dev]
+pytest>=7.0
+black>=23.0
