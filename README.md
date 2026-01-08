@@ -1,6 +1,8 @@
 # Swarm-Contrastive Decomposition 🧠
 
-## Overview 📝
+[![PyPI version](https://badge.fury.io/py/swarm-contrastive-decomposition.svg)](https://pypi.org/project/swarm-contrastive-decomposition/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 
 A Python package for decomposition of neurophysiological time series signals using a Particle Swarm Optimised Independence Estimator for Blind Source Separation.
 
@@ -22,34 +24,23 @@ A Python package for decomposition of neurophysiological time series signals usi
 
 ## Installation 🛠️
 
-### Prerequisites
-
-- Python 3.10+
-- PyTorch with CUDA support (recommended)
-
-### Option 1: Install as a Package (Recommended)
+### From PyPI (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/AgneGris/swarm-contrastive-decomposition
-cd swarm-contrastive-decomposition
-
-# Install the package
-pip install -e .
+pip install swarm-contrastive-decomposition
 ```
 
-### Option 2: Using Conda Environment
+### From GitHub (Latest Development Version)
 
 ```bash
-# Clone the repository
+pip install git+https://github.com/AgneGris/swarm-contrastive-decomposition.git
+```
+
+### From Source
+
+```bash
 git clone https://github.com/AgneGris/swarm-contrastive-decomposition
 cd swarm-contrastive-decomposition
-
-# Create conda environment
-conda env create -f decomposition.yml
-conda activate decomposition
-
-# Install the package
 pip install -e .
 ```
 
