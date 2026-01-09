@@ -18,9 +18,8 @@ Thumbs.db
 __pycache__/
 **/__pycache__/
 *.pyc
-*.pkl
 *.npy
-*.mat
+*.pkl
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints
