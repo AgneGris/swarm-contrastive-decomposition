@@ -46,6 +46,10 @@
         "use_coeff_var_fitness": true,
         "remove_bad_fr": true,
         "clamp_percentile": 0.999,
-        "bad_channels": [56]
+        "bad_channels": [56],
+        "peel_off": false,
+        "swarm": false,
+        "fixed_exponent": 2,
+        "electrode": "surface grid"
     }
 }

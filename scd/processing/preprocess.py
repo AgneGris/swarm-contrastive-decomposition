@@ -83,7 +83,7 @@ def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
     return x[factor:]
 
 
-def whiten(x: torch.Tensor, method: str = "zca") -> torch.Tensor:
+def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) -> torch.Tensor:
     """
     Performs whitening on input of shape (samples, channels)
 
@@ -131,7 +131,11 @@ def whiten(x: torch.Tensor, method: str = "zca") -> torch.Tensor:
     elif method == "pca_cor":
         w = s_inv_sqrt.matmul(u.t()).matmul(v_inv_sqrt)
 
-    return torch.matmul(w, x).t().type_as(keep)
+    whitened_x = torch.matmul(w, x).t().type_as(keep)
+    
+    if return_matrix:
+        return whitened_x, w.type_as(keep)
+    return whitened_x
 
 
 def autocorrelation_whiten(x: torch.Tensor, extension_factor: int, method: str = "zca"):

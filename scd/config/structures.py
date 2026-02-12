@@ -47,6 +47,7 @@ class Config:
     iteration_patience: int = 20
     acceptance_silhouette: float = 0.85
     acceptance_max_roa: float = 30
+    peel_off: bool = True
     peel_off_window_size_ms: int = 20
     peel_off_repeats: bool = True
     remove_bad_fr: bool = True
@@ -60,6 +61,8 @@ class Config:
     edge_mask_size: int = 200
 
     # Swarm parameters
+    swarm: bool = True
+    fixed_exponent: Optional[float] = None
     max_swarm_steps: int = 100
     swarm_patience: int = 10
     starting_exponents: Sequence[float] = (2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
@@ -86,6 +89,7 @@ class Config:
     output_final_source_plot: bool = False
     verbose_mode: bool = True
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    electrode: Optional[Sequence] = None
 
     @property
     def peel_off_window_size(self) -> int:
@@ -106,6 +110,7 @@ class Data:
     ica_learning_rate: float = 0.1
     ica_momentum: float = 0.9
     edge_mask_size: int = 200
+    electrode: Optional[torch.Tensor] = None
 
     def __post_init__(self):
         self.init_all()

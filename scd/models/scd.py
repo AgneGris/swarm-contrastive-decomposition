@@ -36,6 +36,8 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
+        self.source_callback = None
+
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
         """Applies preprocessing steps to emg as specified by config"""
 
@@ -81,7 +83,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         emg = extend(emg, self.config.extension_factor)
 
         # Finally decorrelate the extended emg
-        emg = whiten(emg, self.config.whitening_method)
+        emg, self.w_mat = whiten(emg, self.config.whitening_method, return_matrix=True)
 
         if self.config.autocorrelation_whiten:
             emg = autocorrelation_whiten(
@@ -286,8 +288,18 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             self.data.global_best["timestamps"] = timestamps[fitness.argmax()]
             self.data.global_best["silhouette"] = silhouettes[fitness.argmax()]
 
-        # Use the fitness to update the swarm particles (the exponents)
-        self.swarm_step(fitness)
+        if self.config.swarm:
+            # Use the fitness to update the swarm particles (the exponents)
+            self.swarm_step(fitness)
+        else:
+            # Use fixed exponent for all sources
+            self.data.exponents = torch.full_like(
+                self.data.exponents, 
+                float(self.config.fixed_exponent)
+            )
+            # Store in exponents list for tracking
+            self.exponents_list.append(self.data.exponents.detach().cpu().numpy().copy())
+            self.best_exp_idx_list.append(torch.tensor(0))
 
         # Use the timestamps with the best fitness to update the weights by STA
         sample = spike_triggered_average(
@@ -345,20 +357,32 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         self,
         emg: torch.Tensor,
         config: Optional[Config] = None,
+        source_callback=None,
     ) -> Tuple[List[torch.Tensor], Dict]:
         """Sets optimiser and runs"""
 
         self.initialise_dictionary()
 
+        self.source_callback = source_callback
+
         # Initialise dataclasses, preprocessing the emg prior to assignment
         self.config = config if config is not None else Config()
+        
+        if not self.config.swarm:
+            starting_exponents = [float(self.config.fixed_exponent)]
+        else:
+            starting_exponents = self.config.starting_exponents
+    
         self.data = Data(
             emg=self.preprocess_emg(emg),
-            starting_exponents=self.config.starting_exponents,
+            starting_exponents=starting_exponents,
             ica_learning_rate=self.config.ica_learning_rate,
             ica_momentum=self.config.ica_momentum,
             edge_mask_size=self.config.edge_mask_size,
+            electrode=self.config.electrode
         )
+
+        self.decomp["w_mat"] = self.w_mat.cpu().numpy().copy()
 
         # Finally run swarm contrastive decomposition with source checking
         patience = 0
@@ -418,9 +442,17 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 for timestamps in timestamp_list:
                     library.append(timestamps)
 
+                if self.source_callback:
+                    self.source_callback(
+                        source=self.data.global_best["source"].detach().cpu(), 
+                        timestamps=timestamps.detach().cpu(),
+                        iteration=iteration,
+                        silhouette=self.data.global_best["silhouette"].item()
+                    )
+
                 if self.config.output_final_source_plot:
                     plot_accepted_source(self.data.global_best["source"], timestamps)
-
+                        
                 self.decomp["silhouettes"].append(self.data.global_best["silhouette"])
                 self.decomp["timestamps"].append(timestamps)
                 self.decomp["fr"].append(
@@ -453,7 +485,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 message = str(iteration) + ": reject low silhouette source."
                 peel = False
 
-            if peel:
+            if peel and self.config.peel_off:
                 self.data.emg = peel_off_source(
                     self.data.emg,
                     self.data.global_best["timestamps"],
