@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swarm-contrastive-decomposition"
-version = "0.1.0"
+version = "0.1.1"
 description = "Decomposition of Neurophysiological Time Series Signals with a Particle Swarm Optimised Independence Estimator"
 readme = "README.md"
 license = {text = "CC-BY-NC-4.0"}
