@@ -55,7 +55,7 @@ class Config:
 
     # ICA parameters
     max_ica_steps: int = 1000
-    ica_patience: int = 10
+    ica_patience: int = 100
     ica_learning_rate: float = 0.001
     ica_momentum: float = 0.9
     edge_mask_size: int = 200
