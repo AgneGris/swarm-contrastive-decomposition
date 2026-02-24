@@ -47,9 +47,8 @@
         "remove_bad_fr": true,
         "clamp_percentile": 0.999,
         "bad_channels": [56],
-        "peel_off": false,
-        "swarm": false,
-        "fixed_exponent": 2,
+        "peel_off": true,
+        "swarm": true,
         "electrode": "surface grid"
     }
 }

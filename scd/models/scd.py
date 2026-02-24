@@ -38,6 +38,22 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
         self.source_callback = None
 
+    def _capture_preprocessing_config(self):
+        """Snapshot the preprocessing parameters into decomp for later replay."""
+        self.decomp["preprocessing_config"] = {
+            "notch_params":           self.config.notch_params,
+            "low_pass_cutoff":        self.config.low_pass_cutoff,
+            "high_pass_cutoff":       self.config.high_pass_cutoff,
+            "time_differentiate":     self.config.time_differentiate,
+            "extension_factor":       self.config.extension_factor,
+            "whitening_method":       self.config.whitening_method,
+            "autocorrelation_whiten": self.config.autocorrelation_whiten,
+            "sampling_frequency":     self.config.sampling_frequency,
+            "peel_off_window_size":   self.config.peel_off_window_size,
+            "clamp_percentile":       self.config.clamp_percentile,
+            "edge_mask_size":         self.config.edge_mask_size,
+        }
+
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
         """Applies preprocessing steps to emg as specified by config"""
 
@@ -350,68 +366,103 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             "fr": [],
             "cov": [],
             "best_exp": [],
-            "source": [],
+            # Ordered record of every peel-off performed during decomposition.
+            # Each entry: {
+            #   "timestamps":        np.ndarray  (sample indices used for the peel)
+            #   "accepted_unit_idx": int | None  (index in decomp["timestamps"] if
+            #                                     this was an accepted unit; None for
+            #                                     rejected repeats that were still peeled)
+            # }
+            # Replaying these entries in sequence recreates the exact EMG state
+            # that each unit's filter was originally computed on.
+            "peel_off_sequence": [],
+            "preprocessing_config": {},
         }
+
+    def _peel_and_record(self, peel: bool, accepted_unit_idx):
+        """Record peel provenance then apply the peel.
+
+        Args:
+            source_type:       "good" | "repeat" | "bad"
+            peel:              whether a peel should actually be performed
+            accepted_unit_idx: the index the current unit has in decomp["timestamps"]
+                            if it was accepted (i.e. len(decomp["timestamps"]) - 1
+                            after appending), or None for repeats/bad units
+        """
+        if peel and self.config.peel_off:
+            ts = self.data.global_best["timestamps"]
+
+            # Record provenance before mutating self.data.emg
+            self.decomp["peel_off_sequence"].append({
+                "timestamps":        ts.detach().cpu().numpy().copy(),
+                "accepted_unit_idx": accepted_unit_idx,
+            })
+
+            self.data.emg = peel_off_source(
+                self.data.emg,
+                ts,
+                self.config.peel_off_window_size,
+            )
 
     def run(
         self,
         emg: torch.Tensor,
-        config: Optional[Config] = None,
+        config=None,
         source_callback=None,
-    ) -> Tuple[List[torch.Tensor], Dict]:
-        """Sets optimiser and runs"""
+    ):
+        """Sets optimiser and runs swarm contrastive decomposition."""
 
         self.initialise_dictionary()
-
         self.source_callback = source_callback
 
         # Initialise dataclasses, preprocessing the emg prior to assignment
         self.config = config if config is not None else Config()
-        
+
         if not self.config.swarm:
             starting_exponents = [float(self.config.fixed_exponent)]
         else:
             starting_exponents = self.config.starting_exponents
-    
+
         self.data = Data(
             emg=self.preprocess_emg(emg),
             starting_exponents=starting_exponents,
             ica_learning_rate=self.config.ica_learning_rate,
             ica_momentum=self.config.ica_momentum,
             edge_mask_size=self.config.edge_mask_size,
-            electrode=self.config.electrode
+            electrode=self.config.electrode,
         )
 
         self.decomp["w_mat"] = self.w_mat.cpu().numpy().copy()
 
+        # Snapshot preprocessing config for filter recalculation in the editor
+        self._capture_preprocessing_config()
+
         # Finally run swarm contrastive decomposition with source checking
         patience = 0
-        library = []
+        library  = []
         for iteration in range(self.config.max_iterations):
             # First run a swarm contrastive decomposition for a single source
-            self.exponents_list = []
-            self.best_exp_idx_list = []
+            self.exponents_list      = []
+            self.best_exp_idx_list   = []
 
             self.scd_step()
 
             # Categorise the source as good, bad or repeat
-            if ((self.data.global_best["silhouette"]) is not None) and (
-                self.data.global_best["silhouette"] > self.config.acceptance_silhouette
+            if (
+                (self.data.global_best["silhouette"] is not None)
+                and (self.data.global_best["silhouette"] > self.config.acceptance_silhouette)
             ):
-
                 # Find the highest rates of agreement with found sources
                 max_roa = (
                     max(
-                        [
-                            find_quality_metric(
-                                self.data.global_best["timestamps"],
-                                t,
-                                "roa",
-                                self.config.roa_tolerance,
-                                self.config.roa_max_shift,
-                            )
-                            for t in library
-                        ]
+                        find_quality_metric(
+                            self.data.global_best["timestamps"],
+                            t,
+                            "roa",
+                            self.config.roa_tolerance,
+                            self.config.roa_max_shift,
+                        )
+                        for t in library
                     )
                     if len(library) > 0
                     else 0.0
@@ -426,33 +477,31 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                     window_size_in_seconds=1,
                     fsamp2=self.config.sampling_frequency,
                 )
-                if self.config.remove_bad_fr:
-                    if fr < 2 or fr > 100:
-                        source_type = "bad"
+                if self.config.remove_bad_fr and (fr < 2 or fr > 100):
+                    source_type = "bad"
             else:
                 source_type = "bad"
 
+            # ── Handle accepted / repeat / bad 
             if source_type == "good":
                 patience = 0
-                message = str(iteration) + ": accept new source."
-                peel = True
+                message  = str(iteration) + ": accept new source."
+                peel     = True
 
-                timestamp_list = [self.data.global_best["timestamps"]]
-
-                for timestamps in timestamp_list:
-                    library.append(timestamps)
+                timestamps = self.data.global_best["timestamps"]
+                library.append(timestamps)
 
                 if self.source_callback:
                     self.source_callback(
-                        source=self.data.global_best["source"].detach().cpu(), 
+                        source=self.data.global_best["source"].detach().cpu(),
                         timestamps=timestamps.detach().cpu(),
                         iteration=iteration,
-                        silhouette=self.data.global_best["silhouette"].item()
+                        silhouette=self.data.global_best["silhouette"].item(),
                     )
 
                 if self.config.output_final_source_plot:
                     plot_accepted_source(self.data.global_best["source"], timestamps)
-                        
+
                 self.decomp["silhouettes"].append(self.data.global_best["silhouette"])
                 self.decomp["timestamps"].append(timestamps)
                 self.decomp["fr"].append(
@@ -476,27 +525,27 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                     self.data.global_best["source"].detach().cpu().numpy().copy()
                 )
 
+                # Index of this unit in decomp["timestamps"] (just appended above)
+                accepted_unit_idx = len(self.decomp["timestamps"]) - 1
+
             elif source_type == "repeat":
-                patience += 1
-                message = str(iteration) + ": reject repeat source."
-                peel = True if self.config.peel_off_repeats else False
+                patience         += 1
+                message           = str(iteration) + ": reject repeat source."
+                peel              = True if self.config.peel_off_repeats else False
+                accepted_unit_idx = None   # repeat — no entry in results
+
             elif source_type == "bad":
-                patience += 1
-                message = str(iteration) + ": reject low silhouette source."
-                peel = False
+                patience         += 1
+                message           = str(iteration) + ": reject low silhouette source."
+                peel              = False
+                accepted_unit_idx = None
 
-            if peel and self.config.peel_off:
-                self.data.emg = peel_off_source(
-                    self.data.emg,
-                    self.data.global_best["timestamps"],
-                    self.config.peel_off_window_size,
-                )
+            # ── Peel off (records provenance + mutates self.data.emg)
+            self._peel_and_record(peel, accepted_unit_idx)
 
-            # Print the message if mode is verbose
             if self.config.verbose_mode:
                 print(message)
 
-            # Finish finding sources if patience is broken
             if patience == self.config.iteration_patience:
                 break
 
