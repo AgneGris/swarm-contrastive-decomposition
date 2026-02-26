@@ -29,7 +29,8 @@
         "output_final_source_plot": true,
         "use_coeff_var_fitness": true,
         "remove_bad_fr": true,
-        "clamp_percentile": 0.999
+        "clamp_percentile": 0.999,
+        "square_sources_spike_det": true
     },
     "surface": {
         "device": "cuda",
@@ -49,6 +50,7 @@
         "bad_channels": [56],
         "peel_off": true,
         "swarm": true,
+        "square_sources_spike_det": true,
         "electrode": "surface grid"
     }
 }
