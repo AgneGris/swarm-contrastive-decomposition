@@ -238,6 +238,10 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         """Find the timestamps with a two class k means/median clustering.
         and aggregate. Calculates a fitness function for the swarm."""
 
+        # Square sources for spike detection if specified in config
+        if self.config.square_sources_spike_det:
+            sources = sources ** 2
+        
         # Calculate timestamps from k means with associated silhouettes
         timestamps, spike_heights, silhouettes = zip(
             *[

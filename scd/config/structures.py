@@ -75,6 +75,7 @@ class Config:
     use_coeff_var_fitness: bool = True
 
     # Timestamping parameters
+    square_sources_spike_det: bool = False
     reset_peak_separation: int = 40
     final_peak_separation: int = 40
     source_centroid_weighting: float = 0.0

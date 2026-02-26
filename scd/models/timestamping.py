@@ -110,7 +110,7 @@ def source_to_timestamps(
     min_peak_separation: int = 30,
     use_pairwise_silhouette: bool = False,
     use_mean: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Two class k means/median peak selection that returns the cluster with
     the highest peaks and the silhouette score
@@ -146,18 +146,29 @@ def source_to_timestamps(
             [heights.min(), heights.max()], device=heights.device
         ).type_as(heights)
 
-        centroid_distance = centroids.unsqueeze(0)
-        if centroid_distance.device != heights.device:
-            centroid_distance = centroid_distance.to(heights.device)
-
         for _ in range(100):
+            centroid_distance = centroids.unsqueeze(0)
+            if centroid_distance.device != heights.device:
+                centroid_distance = centroid_distance.to(heights.device)
+
             distances = torch.abs(heights.tile([1, 2]) - centroid_distance)
             centroids = scatter_average(heights.squeeze(), distances.argmin(1))
 
+            # If one cluster collapses, return no timestamps
+            if centroids.numel() < 2 or torch.isnan(centroids).any():
+                return (
+                    torch.tensor([]).type_as(heights),
+                    torch.tensor(0.0).type_as(heights),
+                    torch.tensor(0.0).type_as(heights),
+                )
+
         # Check if centroids are empty
         if centroids.numel() == 0 or torch.isnan(centroids).any():
-            return torch.tensor([]).type_as(heights), torch.tensor(0.0).type_as(heights)
-
+            return (
+                torch.tensor([]).type_as(heights),
+                torch.tensor(0.0).type_as(heights),
+                torch.tensor(0.0).type_as(heights),
+            )
         # Part 3: Calculate silhouette score relative to centroids or pairwise
         silhouette = (
             pairwise_silhouette(heights.squeeze(), centroids)
@@ -170,8 +181,11 @@ def source_to_timestamps(
         return locations, source[locations], silhouette
 
     else:
-        return torch.tensor([]).type_as(heights), torch.tensor(0.0).type_as(heights), torch.tensor(0.0).type_as(heights)
-
+        return (
+            torch.tensor([]).type_as(heights),
+            torch.tensor(0.0).type_as(heights),
+            torch.tensor(0.0).type_as(heights),
+        )
 
 
 def spike_triggered_average(
