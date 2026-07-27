@@ -2,12 +2,16 @@
 Swarm Contrastive Decomposition (SCD)
 """
 
-__version__ = "0.1.7"
+__version__ = "0.2.0"
 
 from scd.models.scd import SwarmContrastiveDecomposition
 from scd.config.structures import Config, set_random_seed
 from scd.processing.postprocess import save_results
-from scd.processing.preprocess import compute_extension_factor_bounds
+from scd.processing.preprocess import (
+    estimate_baseline_noise,
+    recommended_extension_factor,
+    replace_bad_channels_with_noise,
+)
 
 from scd.train import (
     load_config,
@@ -23,7 +27,9 @@ __all__ = [
     "Config",
     "set_random_seed",
     "save_results",
-    "compute_extension_factor_bounds",
+    "estimate_baseline_noise",
+    "recommended_extension_factor",
+    "replace_bad_channels_with_noise",
     "load_config",
     "load_data",
     "preprocess_data",

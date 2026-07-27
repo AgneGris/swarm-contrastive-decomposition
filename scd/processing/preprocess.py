@@ -1,7 +1,6 @@
 """Functions to preprocess the signal ready for blind source separation"""
 
-import math
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence
 
 import torch
 from scipy.signal import butter, filtfilt
@@ -11,37 +10,115 @@ from scd.config.structures import set_random_seed
 set_random_seed(seed=42)
 
 
-def compute_extension_factor_bounds(
+def estimate_baseline_noise(x: torch.Tensor) -> float:
+    """
+    Estimate the baseline noise amplitude of an EMG segment, robustly.
+
+    Uses the median absolute deviation rescaled to a Gaussian standard
+    deviation, sigma = MAD / 0.6745, computed per channel and then reduced
+    by the median across channels. MUAPs are sparse and large, so they
+    dominate a standard deviation but barely shift a median — this tracks
+    the noise floor between discharges rather than the activity on top of it.
+
+    Robustness has limits worth knowing. At high activation the surface EMG
+    interference pattern is dense and approximately Gaussian, with no quiet
+    inter-spike baseline to find; there the MAD estimate approaches the
+    standard deviation because the signal genuinely has no separable
+    baseline. The estimate is also computed on unfiltered data, so strong
+    mains interference inflates it.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        EMG of shape (samples, channels).
+
+    Returns
+    -------
+    float
+        Estimated noise standard deviation, or 1e-6 if `x` has no channels.
+    """
+    if x.shape[1] == 0:
+        return 1e-6
+
+    med = x.median(dim=0, keepdim=True).values
+    mad = (x - med).abs().median(dim=0).values      # per channel
+    sigma = mad / 0.6745
+    return float(sigma.median().item())
+
+
+def replace_bad_channels_with_noise(
+    x: torch.Tensor,
+    bad_channels: Sequence[int],
+    seed: int = 42,
+    noise_std: Optional[float] = None,
+) -> torch.Tensor:
+    """
+    Replace bad channels with baseline noise matched to the good channels.
+
+    Zeroing a bad channel leaves an exactly-zero row in the extended
+    observation matrix, so the covariance is rank-deficient by one row per
+    extension step and whitening amplifies those directions through its
+    fixed eigenvalue floor. Filling the channel with noise at the amplitude
+    of the good channels keeps the matrix full rank and stops the dead
+    channel contributing a spurious common component.
+
+    The noise amplitude is the baseline estimate from
+    `estimate_baseline_noise` over the good channels, which tracks the noise
+    floor between discharges rather than the overall signal amplitude.
+
+    Noise is drawn from a dedicated CPU generator seeded with `seed`, so it
+    is reproducible, unaffected by other random draws, and identical
+    regardless of the device `x` lives on.
+
+    NOTE: scd-edition (`_replace_bad_channels` in
+    scd_app.core.filter_recalculation) uses the pooled standard deviation of
+    the good channels instead, which includes MUAP activity and so gives a
+    larger amplitude. To reproduce its output exactly, pass that value via
+    `noise_std`.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        EMG of shape (samples, channels). Modified in place.
+    bad_channels : sequence of int
+        Channel indices to replace.
+    seed : int
+        Seed for the noise generator (default 42, matching scd-edition).
+    noise_std : float, optional
+        Override the estimated amplitude with an explicit value.
+
+    Returns
+    -------
+    torch.Tensor
+        The same tensor, with the bad channels replaced.
+    """
+    bad = list(bad_channels)
+    if not bad:
+        return x
+
+    if noise_std is None:
+        good = [c for c in range(x.shape[1]) if c not in bad]
+        noise_std = estimate_baseline_noise(x[:, good]) if good else 1e-6
+
+    gen = torch.Generator()          # CPU generator -> device-independent noise
+    gen.manual_seed(seed)
+    noise = torch.randn(x.shape[0], len(bad), generator=gen) * noise_std
+    x[:, bad] = noise.to(device=x.device, dtype=x.dtype)
+    return x
+
+
+def recommended_extension_factor(
     num_channels: int,
     bad_channels: Optional[Sequence[int]] = None,
-    sampling_frequency: float = 10240.0,
-    muap_duration_ms: float = 15.0,
-    n_sources: int = 30,
-    max_firing_rate_hz: float = 40.0,
-) -> Tuple[int, int]:
+    target_extended_channels: int = 1000,
+) -> int:
     """
-    Compute the valid range [k_min, k_max] for the extension factor K.
+    Suggest an extension factor from the standard K*M ~ target heuristic.
 
-    Two constraints are derived:
-
-    Constraint 1 — Model identifiability (from K*M >= N*(K + L - 1)):
-        Rearranges to K >= ceil(N*(L-1) / (M-N)), valid when M > N.
-        Below k_min the extended observation matrix is under-determined
-        and source separation may not be uniquely solvable in theory.
-
-    Constraint 2 — Temporal separation (from L + K - 1 < T):
-        Rearranges to K <= T - L = k_max.
-        Above k_max the observation window of one spike overlaps with
-        the next spike epoch at the maximum expected firing rate, causing
-        temporal aliasing in the extended signal.
-
-    Variables
-    ---------
-    K  – extension factor (to constrain)
-    M  – effective channels = num_channels - len(bad_channels)
-    L  – MUAP length in samples  = floor(muap_duration_ms * fs / 1000)
-    N  – assumed number of sources (n_sources, default 30)
-    T  – minimum inter-spike interval = floor(fs / max_firing_rate_hz)
+    Common practice in EMG decomposition is to extend until the observation
+    matrix has on the order of 1000 rows, i.e. K ~ target / M. This depends
+    only on the channel count, not on the sampling rate, and is the value
+    SCD reports in its configuration advice.
 
     Parameters
     ----------
@@ -49,38 +126,18 @@ def compute_extension_factor_bounds(
         Total channels in the raw EMG data.
     bad_channels : sequence of int, optional
         Rejected channel indices (zeroed before decomposition).
-    sampling_frequency : float
-        Sampling rate in Hz.
-    muap_duration_ms : float
-        Assumed MUAP duration in ms (default 15 ms).
-    n_sources : int
-        Assumed maximum number of sources N (default 30).
-    max_firing_rate_hz : float
-        Fastest expected motoneuron firing rate in Hz (default 40 Hz).
+    target_extended_channels : int
+        Target number of extended channels K*M (default 1000).
 
     Returns
     -------
-    k_min : int
-        Minimum K for model identifiability (Constraint 1).
-        Returns 1 when M <= N (constraint has no finite solution).
-    k_max : int
-        Maximum K from temporal separation (Constraint 2).
+    int
+        Recommended K (at least 1).
     """
     M = num_channels - (len(bad_channels) if bad_channels else 0)
-    L = int(muap_duration_ms * sampling_frequency / 1000)
-    T = int(sampling_frequency / max_firing_rate_hz)
-    N = n_sources
-
-    # Constraint 1: K*(M-N) >= N*(L-1)  [requires M > N and L > 1]
-    if M > N and L > 1:
-        k_min = math.ceil(N * (L - 1) / (M - N))
-    else:
-        k_min = 1  # constraint has no finite solution when M <= N
-
-    # Constraint 2: K <= T - L
-    k_max = T - L
-
-    return k_min, k_max
+    if M <= 0:
+        return 1
+    return max(1, round(target_extended_channels / M))
 
 
 def notch_filter(emg: torch.Tensor, f_samp: float, notch_params: tuple, cutoff_lowpass: int):

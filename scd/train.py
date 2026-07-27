@@ -1,6 +1,5 @@
 import json
 import logging
-import warnings
 from pathlib import Path
 from importlib import resources
 
@@ -10,94 +9,12 @@ import torch
 
 from scd.config.structures import Config, set_random_seed
 from scd.models.scd import SwarmContrastiveDecomposition
-from scd.processing.preprocess import compute_extension_factor_bounds
+from scd.processing.preprocess import replace_bad_channels_with_noise
 
 set_random_seed(seed=42)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-
-_MUAP_DURATION_MS = 15.0   # fixed assumption embedded in constraint derivation
-_N_SOURCES        = 30     # fixed assumption embedded in constraint derivation
-
-
-def _validate_configuration(neural_data: torch.Tensor, config: Config) -> None:
-    """
-    Validate extension_factor and peak-separation parameters before training.
-
-    Extension-factor bounds (at fs = sampling_frequency):
-      K_min  — minimum K for model identifiability:
-               derived from  K*M >= N*(K+L-1)  →  K >= ceil(N*(L-1)/(M-N))
-               where M = clean channels, L = MUAP samples, N = _N_SOURCES.
-      K_max  — maximum K from temporal separation:
-               derived from  L + K - 1 < T  →  K <= T - L
-               where T = floor(fs / config.max_firing_rate_hz).
-
-    A ValueError is raised when K > K_max (temporal aliasing guaranteed).
-    A UserWarning is issued when K < K_min (model is under-determined in
-    theory; the algorithm may still succeed for sparse EMG).
-
-    Peak-separation check:
-    A UserWarning is issued when reset_peak_separation_ms >= min ISI at
-    max_firing_rate_hz, which would prevent detecting consecutive spikes
-    from the fastest expected units.
-    """
-    if config.sampling_frequency is None:
-        return
-
-    fs   = config.sampling_frequency
-    K    = config.extension_factor
-    fmax = config.max_firing_rate_hz
-    M    = neural_data.shape[1] - (len(config.bad_channels) if config.bad_channels else 0)
-    L    = int(_MUAP_DURATION_MS * fs / 1000)
-    T    = int(fs / fmax)
-
-    k_min, k_max = compute_extension_factor_bounds(
-        num_channels=neural_data.shape[1],
-        bad_channels=config.bad_channels,
-        sampling_frequency=fs,
-        muap_duration_ms=_MUAP_DURATION_MS,
-        n_sources=_N_SOURCES,
-        max_firing_rate_hz=fmax,
-    )
-
-    if k_max <= 0:
-        raise ValueError(
-            f"Temporal-separation constraint yields k_max={k_max} <= 0. "
-            f"MUAP duration assumption ({_MUAP_DURATION_MS} ms = {L} samples) "
-            f"is too long relative to the minimum ISI at {fmax} Hz "
-            f"({T} samples). Reduce max_firing_rate_hz or check sampling_frequency."
-        )
-
-    if K > k_max:
-        raise ValueError(
-            f"extension_factor={K} violates the temporal-separation constraint "
-            f"(L + K - 1 < T). Maximum allowed K is {k_max} "
-            f"(L={L} samples, T={T} samples at {fmax} Hz). "
-            f"Reduce extension_factor to at most {k_max}."
-        )
-
-    if M > _N_SOURCES and K < k_min:
-        warnings.warn(
-            f"extension_factor={K} is below the theoretical minimum k_min={k_min} "
-            f"for model identifiability (M={M} clean channels, N={_N_SOURCES} sources, "
-            f"L={L} samples). The algorithm may still converge for sparse EMG.",
-            UserWarning,
-            stacklevel=3,
-        )
-
-    # Peak-separation check: warn if reset_peak_separation_ms >= min ISI
-    min_isi_ms = 1000.0 / fmax
-    if config.reset_peak_separation_ms >= min_isi_ms:
-        warnings.warn(
-            f"reset_peak_separation_ms={config.reset_peak_separation_ms} ms "
-            f"(= {config.reset_peak_separation} samples at {fs} Hz) >= "
-            f"minimum ISI at {fmax} Hz ({min_isi_ms:.1f} ms = {T} samples). "
-            f"Consecutive spikes from the fastest units may be missed.",
-            UserWarning,
-            stacklevel=3,
-        )
 
 
 def load_config(config_name: str = "default", config_file: Path = None) -> Config:
@@ -193,10 +110,12 @@ def preprocess_data(neural_data: torch.Tensor, config: Config) -> torch.Tensor:
     
     neural_data = neural_data[start_idx:end_idx, :]
     
-    # Zero out bad channels if specified
+    # Replace bad channels with baseline noise if specified
     if hasattr(config, 'bad_channels') and config.bad_channels:
-        neural_data[:, config.bad_channels] = 0
-        logger.info(f"Zeroed bad channels: {config.bad_channels}")
+        neural_data = replace_bad_channels_with_noise(neural_data, config.bad_channels)
+        logger.info(
+            f"Replaced bad channels with baseline noise: {config.bad_channels}"
+        )
     
     logger.info(f"Preprocessed data shape: {neural_data.shape}")
     return neural_data
@@ -216,6 +135,13 @@ def train_model(neural_data: torch.Tensor, config: Config) -> tuple:
     -------
     tuple
         (dictionary, predicted_timestamps)
+
+    Notes
+    -----
+    When `config.extension_factor` is None it is derived as
+    1000 / kept channels, in `SwarmContrastiveDecomposition.run`, and
+    written back to the config so the resolved value is what the model
+    records in its preprocessing snapshot.
     """
     model = SwarmContrastiveDecomposition()
     predicted_timestamps, dictionary = model.run(neural_data, config)
@@ -266,9 +192,6 @@ def train(
     # Load and preprocess data
     neural_data = load_data(path, key=key, device=config.device)
     neural_data = preprocess_data(neural_data, config)
-
-    # Validate extension_factor and peak-separation parameters
-    _validate_configuration(neural_data, config)
 
     # Train
     dictionary, timestamps = train_model(neural_data, config)

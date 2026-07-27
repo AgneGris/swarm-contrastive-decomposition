@@ -12,6 +12,7 @@ from scd.processing.preprocess import (
     notch_filter,
     low_pass_filter,
     high_pass_filter,
+    recommended_extension_factor,
 )
 from scd.models.timestamping import (
     source_to_timestamps,
@@ -51,7 +52,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             "sampling_frequency":     self.config.sampling_frequency,
             "peel_off_window_size":   self.config.peel_off_window_size,
             "adapt_clamp":            self.config.adapt_clamp,
-            "edge_mask_size":         self.config.edge_mask_size,
+            "edge_mask_size":         self.config.edge_mask_samples,
         }
 
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
@@ -419,6 +420,15 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         # Initialise dataclasses, preprocessing the emg prior to assignment
         self.config = config if config is not None else Config()
 
+        # Derive the extension factor when it was left unset
+        if self.config.extension_factor is None:
+            self.config.extension_factor = recommended_extension_factor(
+                num_channels=emg.shape[1],
+                bad_channels=self.config.bad_channels,
+            )
+            if self.config.verbose_mode:
+                print(f"Extension factor: {self.config.extension_factor}")
+
         if not self.config.swarm:
             starting_exponents = [float(self.config.fixed_exponent)]
         else:
@@ -429,7 +439,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             starting_exponents=starting_exponents,
             ica_learning_rate=self.config.ica_learning_rate,
             ica_momentum=self.config.ica_momentum,
-            edge_mask_size=self.config.edge_mask_size,
+            edge_mask_size=self.config.edge_mask_samples,
             electrode=self.config.electrode,
         )
 

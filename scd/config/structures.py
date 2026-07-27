@@ -37,7 +37,7 @@ class Config:
     notch_params: Optional[Tuple[int, float, bool]] = None  # powerline frequency, bandwidth, harmonics
     low_pass_cutoff: Optional[int] = None
     high_pass_cutoff: Optional[int] = None
-    extension_factor: int = 100
+    extension_factor: Optional[int] = None   # None -> derived as 1000 / kept channels
     whitening_method: str = "zca"
     autocorrelation_whiten: bool = False
     bad_channels: Optional[Sequence[int]] = None
@@ -47,9 +47,8 @@ class Config:
     iteration_patience: int = 20
     acceptance_silhouette: float = 0.85
     acceptance_max_roa: float = 30
-    max_firing_rate_hz: float = 50.0
     peel_off: bool = True
-    peel_off_window_size_ms: int = 20
+    peel_off_window_size_ms: int = 20   # also the assumed MUAP duration
     peel_off_repeats: bool = True
     remove_bad_fr: bool = True
     adapt_clamp: bool = True
@@ -59,7 +58,8 @@ class Config:
     ica_patience: int = 100
     ica_learning_rate: float = 0.001
     ica_momentum: float = 0.9
-    edge_mask_size: int = 200
+    edge_mask_size_ms: float = 19.5             # ms — converted to samples via property
+    edge_mask_size: Optional[int] = None        # legacy override in samples; wins if set
 
     # Swarm parameters
     swarm: bool = True
@@ -78,7 +78,6 @@ class Config:
     # Timestamping parameters
     square_sources_spike_det: bool = True
     reset_peak_separation_ms: float = 4.0   # ms — converted to samples via property
-    final_peak_separation: int = 40
     source_centroid_weighting: float = 0.0
     use_pairwise_silhouette: bool = False
     use_mean_when_clustering: bool = False
@@ -108,7 +107,19 @@ class Config:
     @property
     def roa_max_shift(self) -> int:
         return int(self.roa_max_shift_ms * self.sampling_frequency / 1000)
-    
+
+    @property
+    def edge_mask_samples(self) -> int:
+        """Edge mask in samples, scaled to the sampling rate.
+
+        `edge_mask_size` (raw samples) takes precedence when set, so configs
+        written before the ms-based parameter existed keep their behaviour.
+        """
+        if self.edge_mask_size is not None:
+            return self.edge_mask_size
+        return round(self.edge_mask_size_ms * self.sampling_frequency / 1000)
+
+
 @dataclass
 class Data:
     emg: torch.Tensor

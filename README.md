@@ -144,16 +144,17 @@ Configurations are defined in `scd/configs.json`. Available presets:
 |-----------|-------------|---------|
 | `device` | `"cuda"` for GPU or `"cpu"` | `"cuda"` |
 | `acceptance_silhouette` | Quality threshold for source acceptance | `0.85` |
-| `extension_factor` | Typically `1000 / num_channels`. Higher values may improve results | `25` |
+| `extension_factor` | Leave unset to derive `1000 / kept channels` automatically. Set it to override. Never capped — see [Choosing the Extension Factor](#choosing-the-extension-factor) | derived |
+| `bad_channels` | Channel indices to reject. Replaced with noise at the estimated baseline amplitude of the good channels before decomposition, and excluded from the kept-channel count used to derive `extension_factor` | `null` |
 | `low_pass_cutoff` | Low-pass filter cutoff frequency (Hz) | `4400` |
 | `high_pass_cutoff` | High-pass filter cutoff frequency (Hz) | `10` |
 | `sampling_frequency` | Sampling frequency of your signal (Hz) | `10240` |
 | `start_time` | Start time for signal trimming (s). Use `0` for beginning | `0` |
 | `end_time` | End time for signal trimming (s). Use `-1` for entire signal | `-1` |
 | `max_iterations` | Maximum decomposition iterations | `200` |
-| `max_firing_rate_hz` | Expected maximum motoneuron firing rate (Hz). Used to derive the temporal-separation bound on `extension_factor` and to validate `reset_peak_separation_ms` | `50.0` |
 | `peel_off_window_size_ms` | Window size for spike-triggered average (ms). `peel_off_window_size` in samples is derived automatically as `ms × fs / 1000` | `20` |
-| `reset_peak_separation_ms` | Minimum distance between two detected peaks in the source signal (ms), converted to samples as `ms × fs / 1000`. Must be less than the minimum ISI at `max_firing_rate_hz` | `4.0` |
+| `reset_peak_separation_ms` | Minimum distance between two detected peaks in the source signal (ms), converted to samples as `ms × fs / 1000` | `4.0` |
+| `edge_mask_size_ms` | Masked region at each end of the signal during optimisation (ms), converted to samples as `ms × fs / 1000`. Set `edge_mask_size` instead to pin a raw sample count | `19.5` |
 | `output_final_source_plot` | Generate plot of final sources | `false` |
 | `use_coeff_var_fitness` | Use coefficient of variation fitness. `true` for EMG, `false` for intracortical | `true` |
 | `remove_bad_fr` | Filter sources with firing rates < 2 Hz or > 100 Hz | `true` |
@@ -181,78 +182,51 @@ Then use it:
 dictionary, timestamps = scd.train("data.mat", config_name="my_experiment")
 ```
 
-## Extension Factor Constraints
+## Choosing the Extension Factor
 
-The extension factor `K` is validated automatically against two mathematical constraints before each run.
-
-### Variables
-
-| Symbol | Meaning |
-|--------|---------|
-| `K` | Extension factor (`extension_factor` config parameter) |
-| `M` | Number of **clean** channels = total channels − `bad_channels` |
-| `L` | MUAP length in samples = `floor(15 ms × fs / 1000)` |
-| `N` | Assumed number of sources = **30** (fixed assumption) |
-| `T` | Minimum inter-spike interval = `floor(fs / max_firing_rate_hz)` samples |
-
-### Constraint 1 — Model Identifiability
-
-Starting from the over-determination condition for the extended mixing matrix:
+`K` is chosen so that the extended observation matrix has on the order of 1000 rows:
 
 ```
-K · M  ≥  N · (K + L − 1)
+K  ≈  1000 / M          M = kept channels = total channels − bad_channels
 ```
 
-Rearranging (requires M > N):
+**This is the default.** If `extension_factor` is absent from your config, SCD derives it from the channel count of the data you pass in and logs the value it used:
 
 ```
-K · (M − N)  ≥  N · (L − 1)
-K  ≥  ceil( N · (L − 1) / (M − N) )   →   K_min
+INFO - extension_factor not set; using 16 (1000 / 63 kept channels)
 ```
 
-`K_min` is the **minimum** K needed for the extended system to be theoretically identifiable (more observations than unknowns in the mixing model).  In practice, the sparse-EMG assumption means the algorithm can converge below this bound; a `UserWarning` is issued rather than an error when `K < K_min`.
+Set `extension_factor` explicitly in your config to override it with any value you like — the derived default applies only when it is unset. All three built-in presets set it explicitly.
 
-### Constraint 2 — Temporal Separation
-
-The observation window for a single spike spans `L + K − 1` samples after extension. It must be shorter than the fastest expected inter-spike interval `T`:
-
-```
-L + K − 1  <  T
-K  ≤  T − L   →   K_max
-```
-
-**A `ValueError` is raised** if `K > K_max`, because temporal aliasing between adjacent spikes is guaranteed.
-
-### Valid range and automatic validation
-
-```
-K_min  ≤  K  ≤  K_max
-```
-
-At the default sampling frequency of 10 240 Hz with `max_firing_rate_hz = 50`:
-
-| Quantity | Value |
-|----------|-------|
-| L (15 ms @ 10 240 Hz) | 153 samples |
-| T (50 Hz `max_firing_rate_hz`) | 204 samples |
-| **K_max** | **51** |
-
-All built-in presets (`default` K=25, `intramuscular` K=20, `surface` K=5) satisfy K ≤ 51.
-
-> **Tip:** If your recordings include faster-firing units (e.g. 70 Hz), set `max_firing_rate_hz` accordingly — this tightens K_max and prevents temporal aliasing at that firing rate.
-
-### Programmatic access
+To compute the same number yourself:
 
 ```python
-from scd import compute_extension_factor_bounds
+from scd import recommended_extension_factor
 
-k_min, k_max = compute_extension_factor_bounds(
-    num_channels=64,
-    bad_channels=[56],          # 63 clean channels
-    sampling_frequency=10240,
-)
-print(f"Valid K range: [{k_min}, {k_max}]")
+K = recommended_extension_factor(num_channels=64, bad_channels=[56])   # 16
 ```
+
+Whatever you set is used as-is: SCD never rejects or adjusts an extension factor. Note that larger `K` costs time and memory, as the covariance and whitening stages scale roughly with `(K · M)²` and `(K · M)³` respectively, and that whitening runs on CPU.
+
+### Changed in 0.2.0
+
+This release contains breaking changes. Configs written for 0.1.x may need editing — `Config` rejects unknown keys, so a removed parameter left in a config file raises `TypeError` on load.
+
+**No extension factor is rejected any more.** Versions 0.1.7 and 0.1.8 validated `extension_factor` against a temporal-separation bound `K ≤ T − L` and raised a `ValueError` when it was exceeded. That bound is uninformative: SCD's assumed MUAP duration (`peel_off_window_size_ms`, 20 ms) equals the minimum ISI at `max_firing_rate_hz = 50`, so it evaluates to zero at every sampling rate. In practice it blocked valid configurations, particularly at lower sampling rates such as 2048 Hz, where the standard `1000 / M` choice exceeds it.
+
+| Removed | Reason |
+|---|---|
+| `compute_extension_factor_bounds()` | Both bounds it returned are unreachable in practice |
+| `max_firing_rate_hz` | Only ever fed the removed checks |
+| `final_peak_separation` | Referenced nowhere |
+
+**Changed defaults:**
+
+- `extension_factor` was a fixed `100`, which silently produced badly over-extended runs for any config that omitted the key. It is now unset by default and derived as `1000 / kept channels`.
+- `edge_mask_size` is now specified in ms as `edge_mask_size_ms` and scaled by the sampling rate; it was a raw sample count tuned for 10 240 Hz. Set `edge_mask_size` to pin a sample count instead.
+- Rejected channels are replaced with baseline noise rather than zeroed. Zeroing left exactly-zero rows in the extended matrix, making the covariance rank-deficient and letting whitening amplify those directions. Amplitude comes from `estimate_baseline_noise`, a MAD-based estimate of the noise floor between discharges.
+
+Runs using `bad_channels` will give different results than 0.1.x. Note also that scd-edition scales its channel fill by the pooled standard deviation of the good channels, which includes MUAP activity; pass `noise_std` explicitly to `replace_bad_channels_with_noise` to reproduce its output.
 
 ## Test Data 🧪
 
