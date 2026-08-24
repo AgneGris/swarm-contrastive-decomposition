@@ -2,7 +2,7 @@
 Swarm Contrastive Decomposition (SCD)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from scd.models.scd import SwarmContrastiveDecomposition
 from scd.config.structures import Config, set_random_seed

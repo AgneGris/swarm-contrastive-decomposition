@@ -1,54 +1,52 @@
-# Content: Citation File Format (CFF) file for the software 
-
 cff-version: 1.2.0
+type: software
 message: "If you use this software, please cite it as below."
 authors:
-- family-names: "Agnese"
-  given-names: "Grison"
+- family-names: "Grison"
+  given-names: "Agnese"
   orcid: "https://orcid.org/0009-0001-5981-3589"
   email: agnese.grison@outlook.it
   affiliation: Imperial College London
-- family-names: "Alexander Kenneth"
-  given-names: "Clarke"
-- family-names: "Silvia"
-  given-names: "Muceli"
-- family-names: "Jaime"
-  given-names: "Ibanez"
-- family-names: "Aritra"
-  given-names: "Kundu"
-- family-names: "Dario"
-  given-names: "Farina"
-title: "A Particle Swarm Optimised Independence Estimator for
-  Blind Source Separation of Neurophysiological Time Series"
-version: 
-doi: 10.1109/TBME.2024.3446806
-date-released: 
-url: "https://github.com/AgneGris/swarm-contrastive-decomposition"
+- family-names: "Clarke"
+  given-names: "Alexander Kenneth"
+- family-names: "Muceli"
+  given-names: "Silvia"
+- family-names: "Ibanez"
+  given-names: "Jaime"
+- family-names: "Kundu"
+  given-names: "Aritra"
+- family-names: "Farina"
+  given-names: "Dario"
+title: "Swarm-Contrastive Decomposition"
+version: "0.2.1"
+date-released: 2026-08-24
+license: PolyForm-Noncommercial-1.0.0
+repository-code: "https://github.com/AgneGris/swarm-contrastive-decomposition"
 preferred-citation:
   type: article
   authors:
-    - family-names: "Agnese"
-      given-names: "Grison"
+    - family-names: "Grison"
+      given-names: "Agnese"
       orcid: "https://orcid.org/0009-0001-5981-3589"
       email: agnese.grison@outlook.it
       affiliation: Imperial College London
-    - family-names: "Alexander Kenneth"
-      given-names: "Clarke"
-    - family-names: "Silvia"
-      given-names: "Muceli"
-    - family-names: "Jaime"
-      given-names: "Ibanez"
-    - family-names: "Aritra"
-      given-names: "Kundu"
-    - family-names: "Dario"
-      given-names: "Farina"
+    - family-names: "Clarke"
+      given-names: "Alexander Kenneth"
+    - family-names: "Muceli"
+      given-names: "Silvia"
+    - family-names: "Ibanez"
+      given-names: "Jaime"
+    - family-names: "Kundu"
+      given-names: "Aritra"
+    - family-names: "Farina"
+      given-names: "Dario"
   doi: 10.1109/TBME.2024.3446806
   journal: "IEEE Transactions on Biomedical Engineering"
-  month: 
-  start:  
-  end:  
+  month: 1
+  start: 227
+  end: 237
   title: "A Particle Swarm Optimised Independence Estimator for
   Blind Source Separation of Neurophysiological Time Series"
-  issue: 
-  volume: 
-  year: 2024
+  issue: 1
+  volume: 72
+  year: 2025

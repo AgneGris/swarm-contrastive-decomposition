@@ -1,13 +1,13 @@
 # Swarm-Contrastive Decomposition 🧠
 
 [![PyPI version](https://badge.fury.io/py/swarm-contrastive-decomposition.svg)](https://pypi.org/project/swarm-contrastive-decomposition/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://www.python.org/downloads/)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 
 A Python package for decomposition of neurophysiological time series signals using a Particle Swarm Optimised Independence Estimator for Blind Source Separation.
 
 <div align="center">
-    <img src="images/pipeline.png" alt="Pipeline" width="500"/>
+    <img src="https://raw.githubusercontent.com/AgneGris/swarm-contrastive-decomposition/main/images/pipeline.png" alt="Pipeline" width="500"/>
 </div>
 
 ## Table of Contents 📚
@@ -56,7 +56,7 @@ python -c "import scd; print(f'SCD version: {scd.__version__}')"
 import scd
 
 # Train with default configuration
-dictionary, timestamps = scd.train("data/input/emg.npy")
+dictionary, timestamps = scd.train("path/to/your/data.mat")
 
 # Save results
 scd.save_results("data/output/emg.pkl", dictionary)
@@ -85,7 +85,7 @@ import scd
 
 # Override specific parameters
 dictionary, timestamps = scd.train(
-    "data/input/emg.npy",
+    "path/to/your/data.mat",
     config_name="surface",
     max_iterations=100,  # override for quick testing
     output_final_source_plot=True
@@ -101,7 +101,7 @@ import scd
 config = scd.load_config("surface")
 
 # Load data
-neural_data = scd.load_data("data/input/emg.npy", device=config.device)
+neural_data = scd.load_data("path/to/your/data.mat", device=config.device)
 
 # Preprocess
 neural_data = scd.preprocess_data(neural_data, config)
@@ -115,7 +115,7 @@ scd.save_results("output.pkl", dictionary)
 
 ### Supported Data Formats
 
-- `.mat` — MATLAB files (specify the variable name with `key` parameter)
+- `.mat` — MATLAB files, including HDF5-based v7.3 files (specify the variable name with `key` parameter)
 - `.npy` — NumPy arrays
 
 ```python
@@ -142,7 +142,7 @@ Configurations are defined in `scd/configs.json`. Available presets:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `device` | `"cuda"` for GPU or `"cpu"` | `"cuda"` |
+| `device` | `"cuda"` for GPU or `"cpu"`; automatically selected when omitted | CUDA when available, otherwise CPU |
 | `acceptance_silhouette` | Quality threshold for source acceptance | `0.85` |
 | `extension_factor` | Leave unset to derive `1000 / kept channels` automatically. Set it to override. Never capped — see [Choosing the Extension Factor](#choosing-the-extension-factor) | derived |
 | `bad_channels` | Channel indices to reject. Replaced with noise at the estimated baseline amplitude of the good channels before decomposition, and excluded from the kept-channel count used to derive `extension_factor` | `null` |
@@ -230,9 +230,9 @@ Runs using `bad_channels` will give different results than 0.1.x. Note also that
 
 ## Test Data 🧪
 
-The repository includes test data to verify your installation:
+The source repository includes test data to verify a development installation:
 
-- **File:** `data/input/emg.npy`
+- **File:** `data/input/emg.mat`
 - **Type:** Surface EMG
 - **Sampling rate:** 10240 Hz
 - **Configuration:** Use `"surface"` config
@@ -242,7 +242,7 @@ import scd
 
 # Run with test data
 dictionary, timestamps = scd.train(
-    "data/input/emg.npy",
+    "data/input/emg.mat",
     config_name="surface"
 )
 
@@ -261,7 +261,7 @@ We welcome contributions! Here's how you can contribute:
 
 ## License 📜
 
-This project is licensed under the CC BY-NC 4.0 License.
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/). Commercial use is not permitted without a separate license from the licensor.
 
 ## Citation
 
@@ -272,10 +272,10 @@ If you use this code in your research, please cite our paper:
   author={Grison, Agnese and Clarke, Alexander Kenneth and Muceli, Silvia and Ibáñez, Jaime and Kundu, Aritra and Farina, Dario},
   journal={IEEE Transactions on Biomedical Engineering}, 
   title={A Particle Swarm Optimised Independence Estimator for Blind Source Separation of Neurophysiological Time Series}, 
-  year={2024},
-  volume={},
-  number={},
-  pages={1-11},
+  year={2025},
+  volume={72},
+  number={1},
+  pages={227--237},
   doi={10.1109/TBME.2024.3446806},
   keywords={Recording; Time series analysis; Sorting; Vectors; Measurement; Electrodes; Probes; Independent component analysis; particle swarm optimisation; blind source separation; intramuscular electromyography; intracortical recording}
 }

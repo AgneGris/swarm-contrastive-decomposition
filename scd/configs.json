@@ -1,7 +1,5 @@
 {
     "default": {
-        "device": "cuda",
-
         "sampling_frequency": 10240,
         "start_time": 0,
         "end_time": -1,
@@ -58,8 +56,6 @@
     },
 
     "intramuscular": {
-        "device": "cuda",
-
         "sampling_frequency": 10240,
         "start_time": 0,
         "end_time": -1,
@@ -116,8 +112,6 @@
     },
 
     "surface": {
-        "device": "cuda",
-
         "sampling_frequency": 10240,
         "start_time": 0,
         "end_time": -1,

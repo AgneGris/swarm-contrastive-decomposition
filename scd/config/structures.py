@@ -34,10 +34,12 @@ class Config:
     # EMG preprocessing parameters
     sampling_frequency: Optional[int] = None
     time_differentiate: Optional[bool] = None
-    notch_params: Optional[Tuple[int, float, bool]] = None  # powerline frequency, bandwidth, harmonics
+    notch_params: Optional[Tuple[int, float, bool]] = (
+        None  # powerline frequency, bandwidth, harmonics
+    )
     low_pass_cutoff: Optional[int] = None
     high_pass_cutoff: Optional[int] = None
-    extension_factor: Optional[int] = None   # None -> derived as 1000 / kept channels
+    extension_factor: Optional[int] = None  # None -> derived as 1000 / kept channels
     whitening_method: str = "zca"
     autocorrelation_whiten: bool = False
     bad_channels: Optional[Sequence[int]] = None
@@ -48,7 +50,7 @@ class Config:
     acceptance_silhouette: float = 0.85
     acceptance_max_roa: float = 30
     peel_off: bool = True
-    peel_off_window_size_ms: int = 20   # also the assumed MUAP duration
+    peel_off_window_size_ms: int = 20  # also the assumed MUAP duration
     peel_off_repeats: bool = True
     remove_bad_fr: bool = True
     adapt_clamp: bool = True
@@ -58,8 +60,8 @@ class Config:
     ica_patience: int = 100
     ica_learning_rate: float = 0.001
     ica_momentum: float = 0.9
-    edge_mask_size_ms: float = 19.5             # ms — converted to samples via property
-    edge_mask_size: Optional[int] = None        # legacy override in samples; wins if set
+    edge_mask_size_ms: float = 19.5  # ms — converted to samples via property
+    edge_mask_size: Optional[int] = None  # legacy override in samples; wins if set
 
     # Swarm parameters
     swarm: bool = True
@@ -77,20 +79,24 @@ class Config:
 
     # Timestamping parameters
     square_sources_spike_det: bool = True
-    reset_peak_separation_ms: float = 4.0   # ms — converted to samples via property
+    reset_peak_separation_ms: float = 4.0  # ms — converted to samples via property
     source_centroid_weighting: float = 0.0
     use_pairwise_silhouette: bool = False
     use_mean_when_clustering: bool = False
     min_peaks_in_source: int = 15
-    roa_tolerance_ms: float = 0.5   # ms
-    roa_max_shift_ms: int = 30      # ms
+    roa_tolerance_ms: float = 0.5  # ms
+    roa_max_shift_ms: int = 30  # ms
 
     # Plotting and verbosity
     output_source_plot: bool = False
     output_final_source_plot: bool = False
     verbose_mode: bool = True
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    device: Optional[str] = None
     electrode: Optional[Sequence] = None
+
+    def __post_init__(self) -> None:
+        if self.device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     @property
     def peel_off_window_size(self) -> int:
