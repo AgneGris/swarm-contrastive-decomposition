@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/swarm-contrastive-decomposition.svg)](https://pypi.org/project/swarm-contrastive-decomposition/)
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://www.python.org/downloads/)
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+[![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/license/bsd-3-clause)
 
 A Python package for decomposition of neurophysiological time series signals using a Particle Swarm Optimised Independence Estimator for Blind Source Separation.
 
@@ -261,7 +261,7 @@ We welcome contributions! Here's how you can contribute:
 
 ## License 📜
 
-This project is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/). Commercial use is not permitted without a separate license from the licensor.
+This project is licensed under the [BSD 3-Clause License](LICENSE).
 
 ## Citation
 

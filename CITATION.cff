@@ -18,9 +18,9 @@ authors:
 - family-names: "Farina"
   given-names: "Dario"
 title: "Swarm-Contrastive Decomposition"
-version: "0.2.1"
+version: "0.2.2"
 date-released: 2026-08-24
-license: PolyForm-Noncommercial-1.0.0
+license: BSD-3-Clause
 repository-code: "https://github.com/AgneGris/swarm-contrastive-decomposition"
 preferred-citation:
   type: article
