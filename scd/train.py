@@ -10,6 +10,7 @@ import torch
 
 from scd.config.structures import Config, set_random_seed
 from scd.models.scd import SwarmContrastiveDecomposition
+from scd.processing.postprocess import signal_to_array
 from scd.processing.preprocess import replace_bad_channels_with_noise
 
 set_random_seed(seed=42)
@@ -220,9 +221,23 @@ def train(
 
     # Load and preprocess data
     neural_data = load_data(path, key=key, device=config.device)
+
+    # Snapshot the signal as loaded before preprocess_data slices it and
+    # overwrites bad channels in place; the editor reproduces both from
+    # dictionary["preprocessing_config"].
+    raw_signal = signal_to_array(neural_data) if config.save_data else None
+
     neural_data = preprocess_data(neural_data, config)
 
     # Train
     dictionary, timestamps = train_model(neural_data, config)
+
+    if raw_signal is not None:
+        dictionary["data"] = raw_signal
+        logger.info(
+            "Stored the signal as loaded in dictionary['data'] (%.1f MB) so the "
+            "results can be edited in scd-edition; set save_data=False to omit it",
+            raw_signal.nbytes / 1e6,
+        )
 
     return dictionary, timestamps

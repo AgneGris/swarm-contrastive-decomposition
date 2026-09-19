@@ -15,6 +15,7 @@ A Python package for decomposition of neurophysiological time series signals usi
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
+- [Editing Results in SCD Edition](#editing-results-in-scd-edition)
 - [Configuration](#configuration)
 - [Test Data](#test-data)
 - [Contributing](#contributing)
@@ -62,6 +63,8 @@ dictionary, timestamps = scd.train("path/to/your/data.mat")
 scd.save_results("data/output/emg.pkl", dictionary)
 ```
 
+The saved file can be opened directly in [SCD Edition](https://github.com/AgneGris/scd-edition) to inspect and edit the motor units — see [Editing Results in SCD Edition](#editing-results-in-scd-edition).
+
 ## Usage
 
 ### Basic Usage
@@ -104,14 +107,16 @@ config = scd.load_config("surface")
 neural_data = scd.load_data("path/to/your/data.mat", device=config.device)
 
 # Preprocess
-neural_data = scd.preprocess_data(neural_data, config)
+neural_data_preprocessed = scd.preprocess_data(neural_data, config)
 
 # Train model
-dictionary, timestamps = scd.train_model(neural_data, config)
+dictionary, timestamps = scd.train_model(neural_data_preprocessed, config)
 
-# Save results
-scd.save_results("output.pkl", dictionary)
+# Save results, storing the signal as loaded so the file can be edited in SCD Edition
+scd.save_results("output.pkl", dictionary, neural_data=neural_data)
 ```
+
+In this workflow `train_model` does not see the loaded signal, so pass it to `save_results` yourself if you want to edit the results later. Pass the tensor returned by `load_data`; `preprocess_data` records what it did (trimming, bad channels) in `dictionary["preprocessing_config"]`, and SCD Edition reproduces it.
 
 ### Supported Data Formats
 
@@ -127,6 +132,43 @@ dictionary, timestamps = scd.train("data.npy")
 ```
 
 Data should have shape `(time, channels)` or `(channels, time)` — the loader will automatically transpose if needed.
+
+## Editing Results in SCD Edition ✏️
+
+[SCD Edition](https://github.com/AgneGris/scd-edition) is the companion desktop app for this package: it can run the same decomposition from a GUI, and it lets you inspect motor unit action potentials, add or delete discharges, remove outliers, recalculate filters and visualise discharge behaviour. You do not need to decompose inside the app — decompose here, then open the `.pkl` written by `save_results` with **Load Decomposition** in the app's Edition tab.
+
+For that to work the app needs the signal you decomposed, so by default `train` stores it in the results under `dictionary["data"]` and `save_results` writes it to disk. **This makes the output file larger by `channels × samples × 4 bytes`** — 26 MB for the bundled test recording (64 channels, 10 s at 10 240 Hz), but around 3 GB for 5 minutes of 256 channels at the same rate. If you do not intend to edit the results, turn it off:
+
+```python
+dictionary, timestamps = scd.train("data.mat", config_name="surface", save_data=False)
+```
+
+or set `"save_data": false` in your config. Without the signal, SCD Edition still opens the file and lets you edit and save spike trains, but MUAP display and filter recalculation are unavailable.
+
+What is stored:
+
+| Key | Content |
+|-----|---------|
+| `data` | The signal exactly as `load_data` returned it — full length, all channels, before trimming and bad-channel replacement — as a float32 array of shape `(channels, samples)` |
+| `preprocessing_config` | Filter settings, extension factor, whitening, plus `bad_channels`, `start_time` and `end_time`, so the trimming and channel replacement done by `preprocess_data` can be reproduced |
+| `w_mat`, `filters`, `peel_off_sequence` | Whitening matrix, separation vectors and peel-off history needed to replay the decomposition |
+
+Because the stored signal is the untouched recording, rejected channels are kept and flagged rather than overwritten, and timestamps are stored relative to the trimmed window with the offset recorded, so they line up with the full signal in the editor.
+
+### The silhouette (SIL) is not the same number in the two tools
+
+Both tools report a silhouette per motor unit, but they are computed differently and should not be compared or thresholded interchangeably.
+
+| | This package (`dictionary["silhouettes"]`) | SCD Edition (MU properties, Quality chart) |
+|---|---|---|
+| When | During decomposition, at the iteration that accepted the unit; frozen in the output | After loading and after every edit, from the unit's current spikes |
+| Source | The source of that iteration: computed from the peeled EMG (earlier units removed), restricted to the decomposition window, edge-masked, clamped (`adapt_clamp`), squared (`square_sources_spike_det`) | The full-length source recomputed on load (spike-triggered-average filter on the whole recording, z-scored on the decomposition window), squared; not clamped or edge-masked |
+| Points | Every peak of the squared source at least `reset_peak_separation_ms` apart — spikes *and* baseline peaks | Spikes: the unit's current timestamps. Baseline: every peak lower than the smallest spike |
+| Classes | Two-class k-medians on peak heights (k-means with `use_mean_when_clustering`); spikes are the upper cluster | No clustering — the spike set is whatever the unit currently has |
+| Score | For each peak, `a` = distance to its own centroid, `b` = distance to the other centroid; SIL = mean over all peaks of `(b − a) / max(a, b)`. With `use_pairwise_silhouette` the mean distance to the other peaks replaces the centroid distance (a true silhouette) | Only spike amplitudes enter: `d_s = Σ (s − mean_spikes)²`, `d_b = Σ (s − mean_baseline)²`; SIL = `(d_b − d_s) / max(d_b, d_s)` (`motor_unit_toolbox.get_silhouette_measure`, the formulation of Negro et al., 2016). Squared distances, summed; the baseline enters only through its mean |
+| Threshold | `acceptance_silhouette` (0.85 default, 0.8 in `surface`) decides whether a source is accepted | SIL ≥ 0.9 marks a unit as reliable in the Quality chart |
+
+In practice the two values are often close for well-separated units — on the bundled test recording they agree to within 0.01 — but they diverge when the baseline peaks are numerous or spread out (this package averages over them, the toolbox ignores their spread), when a unit has been edited (only SCD Edition's value follows the edits), and whenever the two sources differ (window vs full recording, peeled vs recomputed filter). SCD Edition keeps this package's values under `scd_metadata["silhouettes"]` for reference but does not display them; the Decomposition tab's *SIL Threshold* is this package's `acceptance_silhouette`, not the Quality-chart SIL.
 
 ## Configuration ⚙️
 
@@ -159,6 +201,7 @@ Configurations are defined in `scd/configs.json`. Available presets:
 | `use_coeff_var_fitness` | Use coefficient of variation fitness. `true` for EMG, `false` for intracortical | `true` |
 | `remove_bad_fr` | Filter sources with firing rates < 2 Hz or > 100 Hz | `true` |
 | `adapt_clamp` | Adaptively clamp each source using its personal-best spike statistics; falls back to hard ±30 σ when no spike history exists. Set to `false` to always use the fixed ±30 σ hard clamp | `true` |
+| `save_data` | Store the signal as loaded in the results so the output can be edited in [SCD Edition](#editing-results-in-scd-edition). Costs `channels × samples × 4 bytes` of disk; set `false` if you will not edit | `true` |
 
 ### Custom Configuration
 
@@ -207,6 +250,13 @@ K = recommended_extension_factor(num_channels=64, bad_channels=[56])   # 16
 ```
 
 Whatever you set is used as-is: SCD never rejects or adjusts an extension factor. Note that larger `K` costs time and memory, as the covariance and whitening stages scale roughly with `(K · M)²` and `(K · M)³` respectively, and that whitening runs on CPU.
+
+### Changed in 0.2.3
+
+- `train` now stores the loaded signal in `dictionary["data"]` by default so the output can be edited in [SCD Edition](#editing-results-in-scd-edition). Output files grow by `channels × samples × 4 bytes`; set `save_data=False` to keep the previous behaviour.
+- `save_results` accepts a string path and an optional `neural_data` argument for the step-by-step workflow.
+- `dictionary["preprocessing_config"]` additionally records `bad_channels`, `start_time`, `end_time` and `square_sources_spike_det`.
+- New helper `signal_to_array` converts a loaded tensor to the stored `(channels, samples)` float32 layout.
 
 ### Changed in 0.2.0
 

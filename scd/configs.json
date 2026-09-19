@@ -49,6 +49,8 @@
         "roa_tolerance_ms": 0.5,
         "roa_max_shift_ms": 30,
 
+        "save_data": true,
+
         "output_source_plot": false,
         "output_final_source_plot": false,
         "verbose_mode": true,
@@ -105,6 +107,8 @@
         "roa_tolerance_ms": 0.5,
         "roa_max_shift_ms": 30,
 
+        "save_data": true,
+
         "output_source_plot": false,
         "output_final_source_plot": true,
         "verbose_mode": true,
@@ -160,6 +164,8 @@
         "min_peaks_in_source": 15,
         "roa_tolerance_ms": 0.5,
         "roa_max_shift_ms": 30,
+
+        "save_data": true,
 
         "output_source_plot": false,
         "output_final_source_plot": true,

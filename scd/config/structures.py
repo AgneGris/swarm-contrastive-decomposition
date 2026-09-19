@@ -87,6 +87,12 @@ class Config:
     roa_tolerance_ms: float = 0.5  # ms
     roa_max_shift_ms: int = 30  # ms
 
+    # Output
+    # Store the signal as loaded in the results dictionary so the output can
+    # be edited in scd-edition (MUAPs, filter recalculation). Costs
+    # channels x samples x 4 bytes on disk; set False if you will not edit.
+    save_data: bool = True
+
     # Plotting and verbosity
     output_source_plot: bool = False
     output_final_source_plot: bool = False

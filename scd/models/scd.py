@@ -53,6 +53,13 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             "peel_off_window_size":   self.config.peel_off_window_size,
             "adapt_clamp":            self.config.adapt_clamp,
             "edge_mask_size":         self.config.edge_mask_samples,
+            "square_sources_spike_det": self.config.square_sources_spike_det,
+            # What preprocess_data did to the signal before it reached run():
+            # lets an editor holding the signal as loaded (decomp["data"])
+            # reproduce the slice and bad-channel fill exactly.
+            "bad_channels":           list(self.config.bad_channels or []),
+            "start_time":             self.config.start_time,
+            "end_time":               self.config.end_time,
         }
 
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
