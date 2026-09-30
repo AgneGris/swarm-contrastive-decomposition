@@ -208,10 +208,7 @@ def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
 
     assert x.ndim == 2, "Input must be two-dimensional"
 
-    # Pad end with zeros to stop torch.roll moving end samples to start
-    x = torch.concat([torch.zeros([factor, x.shape[1]]).type_as(x), x])
-
-    # Perform extension and return with rolled values removed (pre-allocated to avoid peak of memory usage)
+    # Write each delayed copy straight into a pre-allocated output (no padding, no roll)
     n_samples, n_channels = x.shape
     x_extended = torch.empty(
         (n_samples, factor * n_channels),
@@ -219,10 +216,10 @@ def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
         dtype=x.dtype,
     )
     for shift in range(factor):
-        x_extended[
-            :, shift * n_channels : (shift + 1) * n_channels
-        ] = x.roll(shift, 0)
-    return x_extended[factor:]
+        cols = slice(shift * n_channels, (shift + 1) * n_channels)
+        x_extended[:shift, cols] = 0
+        x_extended[shift:, cols] = x[: max(n_samples - shift, 0)]
+    return x_extended
 
 
 def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) -> torch.Tensor:
