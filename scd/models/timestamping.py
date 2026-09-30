@@ -1,10 +1,9 @@
 """Functions needed to convert time series into spike timestamps and
 assess the quality of these timestamps"""
 
-from typing import Tuple, List
-
 import torch
 from scipy.signal import find_peaks
+
 from scd.config.structures import set_random_seed
 
 set_random_seed(seed=42)
@@ -57,7 +56,7 @@ def scatter_median(input: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
     return output
 
 
-def pairwise_silhouette(heights: torch.Tensor, centroids: torch.Tensor):
+def pairwise_silhouette(heights: torch.Tensor, centroids: torch.Tensor) -> torch.Tensor:
     """Calculates a two-class true silhouette based on the distance of each
     sample to other samples in its class and samples in the nearest other class
     heights and centroids must be 1D tensors
@@ -86,7 +85,7 @@ def pairwise_silhouette(heights: torch.Tensor, centroids: torch.Tensor):
     return ((out_class_mean - in_class_mean) / maximal_value).mean()
 
 
-def centroid_silhouette(heights: torch.Tensor, centroids: torch.Tensor):
+def centroid_silhouette(heights: torch.Tensor, centroids: torch.Tensor) -> torch.Tensor:
     """Calculates a two-class pseudo-silhouette based on the distance of each
     sample to its assigned and nearest non-assigned cetroids
     heights and centroids must be 1D tensors
@@ -110,7 +109,7 @@ def source_to_timestamps(
     min_peak_separation: int = 30,
     use_pairwise_silhouette: bool = False,
     use_mean: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Two class k means/median peak selection that returns the cluster with
     the highest peaks and the silhouette score
@@ -145,6 +144,7 @@ def source_to_timestamps(
         centroids = torch.tensor(
             [heights.min(), heights.max()], device=heights.device
         ).type_as(heights)
+        distances = torch.empty((heights.shape[0], 2)).type_as(heights)
 
         for _ in range(100):
             centroid_distance = centroids.unsqueeze(0)
@@ -281,7 +281,9 @@ def rate_of_agreement(
     return 100 * matches.divide(timestamps_1.shape[0] + timestamps_2.shape[0] - matches)
 
 
-def bootstrapped_coeff_var(timestamps: torch.Tensor, n_iterations: int = 1000):
+def bootstrapped_coeff_var(
+    timestamps: torch.Tensor, n_iterations: int = 1000
+) -> torch.Tensor:
     """Runs a bootstrapped version of the interspike coefficient of variation
     and returns the 75th quantile"""
 
@@ -306,14 +308,14 @@ def bootstrapped_coeff_var(timestamps: torch.Tensor, n_iterations: int = 1000):
 
 
 def calculate_firing_rates(
-    unit, window_size_in_seconds: int = 1, fsamp2: float = 10240
-):
+    unit: torch.Tensor, window_size_in_seconds: int = 1, fsamp2: float = 10240
+) -> float:
     spike_times_in_seconds = unit.float() / fsamp2
 
     # Create a tensor of window start times
     window_start_times = torch.arange(
-        spike_times_in_seconds[0],
-        spike_times_in_seconds[-1],
+        float(spike_times_in_seconds[0].item()),
+        float(spike_times_in_seconds[-1].item()),
         window_size_in_seconds,
     ).to(spike_times_in_seconds.device)
 

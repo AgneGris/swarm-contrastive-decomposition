@@ -1,8 +1,8 @@
 import json
 import logging
-from pathlib import Path
 from importlib import resources
-from typing import Optional
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import scipy.io as sio
@@ -20,8 +20,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+Decomposition = dict[str, Any]
 
-def load_config(config_name: str = "default", config_file: Path = None) -> Config:
+
+def load_config(
+    config_name: str = "default", config_file: str | Path | None = None
+) -> Config:
     """
     Load configuration from JSON file.
 
@@ -39,10 +43,12 @@ def load_config(config_name: str = "default", config_file: Path = None) -> Confi
     """
     if config_file is None:
         # Load from package's built-in configs.json
-        with resources.files("scd").joinpath("configs.json").open("r") as f:
+        with (
+            resources.files("scd").joinpath("configs.json").open(encoding="utf-8") as f
+        ):
             config_data = json.load(f)
     else:
-        with open(config_file, "r") as f:
+        with open(config_file, encoding="utf-8") as f:
             config_data = json.load(f)
 
     selected_config = config_data.get(config_name, config_data["default"])
@@ -51,7 +57,7 @@ def load_config(config_name: str = "default", config_file: Path = None) -> Confi
 
 
 def load_data(
-    path: Path, key: str = "emg", device: Optional[str] = None
+    path: str | Path, key: str = "emg", device: str | None = None
 ) -> torch.Tensor:
     """
     Load neural data from .mat or .npy file.
@@ -131,12 +137,13 @@ def preprocess_data(neural_data: torch.Tensor, config: Config) -> torch.Tensor:
     torch.Tensor
         Preprocessed neural data
     """
-    start_idx = int(config.start_time * config.sampling_frequency)
+    sampling_frequency = config.require_sampling_frequency()
+    start_idx = int(config.start_time * sampling_frequency)
 
     if config.end_time == -1 or config.end_time <= 0:
         end_idx = None
     else:
-        end_idx = int(config.end_time * config.sampling_frequency)
+        end_idx = int(config.end_time * sampling_frequency)
 
     neural_data = neural_data[start_idx:end_idx, :]
 
@@ -149,7 +156,9 @@ def preprocess_data(neural_data: torch.Tensor, config: Config) -> torch.Tensor:
     return neural_data
 
 
-def train_model(neural_data: torch.Tensor, config: Config) -> tuple:
+def train_model(
+    neural_data: torch.Tensor, config: Config
+) -> tuple[Decomposition, list[torch.Tensor]]:
     """
     Run the SwarmContrastiveDecomposition model.
 
@@ -178,12 +187,12 @@ def train_model(neural_data: torch.Tensor, config: Config) -> tuple:
 
 
 def train(
-    path: Path,
+    path: str | Path,
     config_name: str = "default",
-    config_file: Path = None,
+    config_file: str | Path | None = None,
     key: str = "emg",
-    **config_overrides,
-) -> tuple:
+    **config_overrides: Any,
+) -> tuple[Decomposition, list[torch.Tensor]]:
     """
     Full training pipeline: load data, preprocess, and train.
 

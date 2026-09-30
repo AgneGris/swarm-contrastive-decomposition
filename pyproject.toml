@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swarm-contrastive-decomposition"
-version = "0.2.3"
+version = "0.2.4"
 description = "Decomposition of Neurophysiological Time Series Signals with a Particle Swarm Optimised Independence Estimator"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -36,7 +36,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "black>=23.0",
+    "pyright>=1.1.414,<2",
+    "ruff>=0.16,<1",
 ]
 
 [project.urls]
@@ -50,3 +51,15 @@ include = ["scd*"]
 
 [tool.setuptools.package-data]
 scd = ["*.json"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF", "BLE001", "TRY002"]
+
+[tool.pyright]
+include = ["scd", "run.py"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

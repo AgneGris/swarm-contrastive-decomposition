@@ -1,12 +1,18 @@
 """Functions to postprocess the results of the model."""
 
 import pickle as pkl
+from collections.abc import MutableMapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
+import torch
 
 
-def signal_to_array(neural_data) -> np.ndarray:
+def signal_to_array(
+    neural_data: torch.Tensor | npt.ArrayLike,
+) -> npt.NDArray[np.float32]:
     """
     Convert a loaded signal to the layout stored under ``"data"``.
 
@@ -15,7 +21,7 @@ def signal_to_array(neural_data) -> np.ndarray:
     array of shape (channels, samples) - the layout scd-edition uses for
     the raw EMG in its own files.
     """
-    if hasattr(neural_data, "detach"):
+    if isinstance(neural_data, torch.Tensor):
         neural_data = neural_data.detach().cpu().numpy()
     data = np.asarray(neural_data)
     if data.ndim != 2:
@@ -30,7 +36,11 @@ def signal_to_array(neural_data) -> np.ndarray:
     return np.array(data, dtype=np.float32, order="C", copy=True)
 
 
-def save_results(output_datafile, dictionary_result, neural_data=None):
+def save_results(
+    output_datafile: str | Path,
+    dictionary_result: MutableMapping[str, Any],
+    neural_data: torch.Tensor | npt.ArrayLike | None = None,
+) -> None:
     """
     Save the dictionary_result to the output_datafile.
 
@@ -51,8 +61,5 @@ def save_results(output_datafile, dictionary_result, neural_data=None):
 
     output_datafile = Path(output_datafile)
     output_datafile.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(output_datafile, "wb") as f:
-            pkl.dump(dictionary_result, f)
-    except Exception as e:
-        print(f"Error occurred while saving results: {e}")
+    with open(output_datafile, "wb") as f:
+        pkl.dump(dictionary_result, f)

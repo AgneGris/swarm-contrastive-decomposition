@@ -1,7 +1,9 @@
 """Functions to preprocess the signal ready for blind source separation"""
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Literal, cast, overload
 
+import numpy as np
 import torch
 from scipy.signal import butter, filtfilt
 
@@ -41,7 +43,7 @@ def estimate_baseline_noise(x: torch.Tensor) -> float:
         return 1e-6
 
     med = x.median(dim=0, keepdim=True).values
-    mad = (x - med).abs().median(dim=0).values      # per channel
+    mad = (x - med).abs().median(dim=0).values  # per channel
     sigma = mad / 0.6745
     return float(sigma.median().item())
 
@@ -50,7 +52,7 @@ def replace_bad_channels_with_noise(
     x: torch.Tensor,
     bad_channels: Sequence[int],
     seed: int = 42,
-    noise_std: Optional[float] = None,
+    noise_std: float | None = None,
 ) -> torch.Tensor:
     """
     Replace bad channels with baseline noise matched to the good channels.
@@ -100,8 +102,8 @@ def replace_bad_channels_with_noise(
         good = [c for c in range(x.shape[1]) if c not in bad]
         noise_std = estimate_baseline_noise(x[:, good]) if good else 1e-6
 
-    gen = torch.Generator()          # CPU generator -> device-independent noise
-    gen.manual_seed(seed)
+    gen = torch.Generator()  # CPU generator -> device-independent noise
+    _ = gen.manual_seed(seed)
     noise = torch.randn(x.shape[0], len(bad), generator=gen) * noise_std
     x[:, bad] = noise.to(device=x.device, dtype=x.dtype)
     return x
@@ -109,7 +111,7 @@ def replace_bad_channels_with_noise(
 
 def recommended_extension_factor(
     num_channels: int,
-    bad_channels: Optional[Sequence[int]] = None,
+    bad_channels: Sequence[int] | None = None,
     target_extended_channels: int = 1000,
 ) -> int:
     """
@@ -140,53 +142,80 @@ def recommended_extension_factor(
     return max(1, round(target_extended_channels / M))
 
 
-def notch_filter(emg: torch.Tensor, f_samp: float, notch_params: tuple, cutoff_lowpass: int):
+def notch_filter(
+    emg: torch.Tensor,
+    f_samp: float,
+    notch_params: tuple[int, float, bool],
+    cutoff_lowpass: int | None,
+) -> torch.Tensor:
     """Filter emg channel by channel"""
 
     keep = torch.zeros(1).type_as(emg)
-    emg = emg.cpu().numpy()
+    emg_array = emg.cpu().numpy()
 
     f_notch, bw, filt_harms = notch_params
 
     # Select the frequencies to filter
-    freqs_to_filter = [f_notch] # base frequency (e.g. 50 Hz for powerline noise in Europe)
+    freqs_to_filter = [
+        f_notch
+    ]  # base frequency (e.g. 50 Hz for powerline noise in Europe)
 
     if filt_harms:
-        freqs_to_filter.extend([f_notch * i for i in range(2, cutoff_lowpass // f_notch + 1)]) # harmonics up to the low pass cutoff
+        if cutoff_lowpass is None:
+            raise ValueError(
+                "low_pass_cutoff must be set when notch harmonics are enabled"
+            )
+        freqs_to_filter.extend(
+            [f_notch * i for i in range(2, cutoff_lowpass // f_notch + 1)]
+        )  # harmonics up to the low pass cutoff
 
     # Filter
     for f in freqs_to_filter:
-        b, a = butter(2, [2 * (f - bw) / f_samp, 2 * (f + bw) / f_samp], btype="bandstop")
-        for channel in range(emg.shape[1]):
-            emg[:, channel] = filtfilt(b, a, emg[:, channel])
+        b, a = cast(
+            tuple[np.ndarray, np.ndarray],
+            butter(
+                2,
+                [2 * (f - bw) / f_samp, 2 * (f + bw) / f_samp],
+                btype="bandstop",
+            ),
+        )
+        for channel in range(emg_array.shape[1]):
+            emg_array[:, channel] = filtfilt(b, a, emg_array[:, channel])
 
-    return torch.from_numpy(emg).type_as(keep)
+    return torch.from_numpy(emg_array).type_as(keep)
 
 
-def high_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int):
+def high_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int) -> torch.Tensor:
     """Filter emg channel by channel"""
 
     keep = torch.zeros(1).type_as(emg)
-    emg = emg.cpu().numpy()
+    emg_array = emg.cpu().numpy()
 
-    b, a = butter(2, 2 * cut_off / f_samp, btype="highpass")
-    for channel in range(emg.shape[1]):
-        emg[:, channel] = filtfilt(b, a, emg[:, channel])
+    b, a = cast(
+        tuple[np.ndarray, np.ndarray],
+        butter(2, 2 * cut_off / f_samp, btype="highpass"),
+    )
+    for channel in range(emg_array.shape[1]):
+        emg_array[:, channel] = filtfilt(b, a, emg_array[:, channel])
 
-    return torch.from_numpy(emg).type_as(keep)
+    return torch.from_numpy(emg_array).type_as(keep)
 
 
-def low_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int):
+def low_pass_filter(emg: torch.Tensor, f_samp: float, cut_off: int) -> torch.Tensor:
     """Filter emg channel by channel"""
 
     keep = torch.zeros(1).type_as(emg)
-    emg = emg.cpu().numpy()
+    emg_array = emg.cpu().numpy()
 
-    b, a = butter(2, 2 * cut_off / f_samp, btype="lowpass")
-    for channel in range(emg.shape[1]):
-        emg[:, channel] = filtfilt(b, a, emg[:, channel])
+    b, a = cast(
+        tuple[np.ndarray, np.ndarray],
+        butter(2, 2 * cut_off / f_samp, btype="lowpass"),
+    )
+    for channel in range(emg_array.shape[1]):
+        emg_array[:, channel] = filtfilt(b, a, emg_array[:, channel])
 
-    return torch.from_numpy(emg).type_as(keep)
+    return torch.from_numpy(emg_array).type_as(keep)
+
 
 def time_differentiate(emg: torch.Tensor) -> torch.Tensor:
     """
@@ -197,11 +226,12 @@ def time_differentiate(emg: torch.Tensor) -> torch.Tensor:
     """
     # Differentiate the signal
     emg = emg[1:] - emg[:-1]
-    
+
     # Duplicate the first sample of each channel back to maintain the original shape
     emg = torch.cat((emg[:1], emg), dim=0)
 
     return emg
+
 
 def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
     """Extends each sample with factor past values"""
@@ -222,7 +252,21 @@ def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
     return x_extended
 
 
-def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) -> torch.Tensor:
+@overload
+def whiten(
+    x: torch.Tensor, method: str = "zca", return_matrix: Literal[False] = False
+) -> torch.Tensor: ...
+
+
+@overload
+def whiten(
+    x: torch.Tensor, method: str, return_matrix: Literal[True]
+) -> tuple[torch.Tensor, torch.Tensor]: ...
+
+
+def whiten(
+    x: torch.Tensor, method: str = "zca", return_matrix: bool = False
+) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
     """
     Performs whitening on input of shape (samples, channels)
 
@@ -245,14 +289,17 @@ def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) ->
     x -= x.mean(1, keepdim=True)
     cov = x.cov()
 
-    if method in ["zca", "pca", "chol"]:
+    valid_methods = {"chol", "zca", "pca", "zca_cor", "pca_cor"}
+    if method not in valid_methods:
+        raise ValueError(f"Unsupported whitening method: {method!r}")
+
+    if method in {"zca", "pca", "chol"}:
         u, s, _ = torch.linalg.svd(cov)
-    elif method in ["zca_cor", "pca_cor"]:
+        v_inv_sqrt = None
+    else:
         v_inv_sqrt = cov.diag().sqrt().reciprocal().diag()
         corr = v_inv_sqrt.matmul(cov).matmul(v_inv_sqrt)
         u, s, _ = torch.linalg.svd(corr)
-    else:
-        raise Exception("Specified method not in list.")
 
     if method == "chol":
         s_inv = (s + 1e-10).reciprocal().diag()
@@ -260,24 +307,27 @@ def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) ->
         w = torch.linalg.cholesky(cov_inv).t()
     else:
         s_inv_sqrt = torch.sqrt(s + 1e-10).reciprocal().diag()
-
-    if method == "zca":
-        w = u.matmul(s_inv_sqrt).matmul(u.t())
-    elif method == "pca":
-        w = torch.matmul(s_inv_sqrt, u.t())
-    elif method == "zca_cor":
-        w = u.matmul(s_inv_sqrt).matmul(u.t()).matmul(v_inv_sqrt)
-    elif method == "pca_cor":
-        w = s_inv_sqrt.matmul(u.t()).matmul(v_inv_sqrt)
+        if method == "zca":
+            w = u.matmul(s_inv_sqrt).matmul(u.t())
+        elif method == "pca":
+            w = torch.matmul(s_inv_sqrt, u.t())
+        elif method == "zca_cor":
+            assert v_inv_sqrt is not None
+            w = u.matmul(s_inv_sqrt).matmul(u.t()).matmul(v_inv_sqrt)
+        else:
+            assert v_inv_sqrt is not None
+            w = s_inv_sqrt.matmul(u.t()).matmul(v_inv_sqrt)
 
     whitened_x = torch.matmul(w, x).t().type_as(keep)
-    
+
     if return_matrix:
         return whitened_x, w.type_as(keep)
     return whitened_x
 
 
-def autocorrelation_whiten(x: torch.Tensor, extension_factor: int, method: str = "zca"):
+def autocorrelation_whiten(
+    x: torch.Tensor, extension_factor: int, method: str = "zca"
+) -> torch.Tensor:
     """Performs segmented autocorrelation whitening on each channel
     Using the overlap add method to reconstruct the signal"""
 

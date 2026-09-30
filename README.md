@@ -75,7 +75,7 @@ import scd
 # Use a predefined configuration
 dictionary, timestamps = scd.train(
     "path/to/your/data.mat",
-    config_name="surface"  # or "default", "intramuscular"
+    config_name="surface",  # or "default", "intramuscular"
 )
 
 scd.save_results("output.pkl", dictionary)
@@ -91,7 +91,7 @@ dictionary, timestamps = scd.train(
     "path/to/your/data.mat",
     config_name="surface",
     max_iterations=100,  # override for quick testing
-    output_final_source_plot=True
+    output_final_source_plot=True,
 )
 ```
 
@@ -246,10 +246,16 @@ To compute the same number yourself:
 ```python
 from scd import recommended_extension_factor
 
-K = recommended_extension_factor(num_channels=64, bad_channels=[56])   # 16
+K = recommended_extension_factor(num_channels=64, bad_channels=[56])  # 16
 ```
 
 Whatever you set is used as-is: SCD never rejects or adjusts an extension factor. Note that larger `K` costs time and memory, as the covariance and whitening stages scale roughly with `(K · M)²` and `(K · M)³` respectively, and that whitening runs on CPU.
+
+### Changed in 0.2.4
+
+- `extend` now writes delayed channel copies directly into one preallocated tensor, avoiding the padded copy and repeated `torch.roll` operations that increased peak memory use.
+- Formatting, linting and basic static type checking are now enforced in CI with Ruff and Pyright.
+- Invalid sampling-rate, fixed-exponent and whitening configurations now fail with clear errors, and `save_results` propagates write/serialization failures to the caller.
 
 ### Changed in 0.2.3
 
@@ -291,10 +297,7 @@ The source repository includes test data to verify a development installation:
 import scd
 
 # Run with test data
-dictionary, timestamps = scd.train(
-    "data/input/emg.mat",
-    config_name="surface"
-)
+dictionary, timestamps = scd.train("data/input/emg.mat", config_name="surface")
 
 print(f"Found {len(dictionary)} motor units")
 ```
@@ -308,6 +311,16 @@ We welcome contributions! Here's how you can contribute:
 3. Commit your changes (`git commit -m 'Add some newfeature'`)
 4. Push to the branch (`git push origin feature/newfeature`)
 5. Open a pull request
+
+Before opening a pull request, run the same checks as CI:
+
+```bash
+pip install -e ".[dev]"
+ruff format --check .
+ruff check .
+pyright
+pytest
+```
 
 ## License 📜
 

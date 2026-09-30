@@ -11,6 +11,7 @@ import scipy.io
 import torch
 
 import scd
+from scd.processing.preprocess import extend, whiten
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,6 +22,37 @@ def test_package_version_matches_project_metadata():
 
     assert match is not None
     assert scd.__version__ == match.group(1)
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    assert f'version: "{scd.__version__}"' in citation
+
+
+def test_extend_preserves_delayed_channel_layout():
+    signal = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+
+    extended = extend(signal, factor=3)
+
+    expected = torch.tensor(
+        [
+            [1.0, 2.0, 0.0, 0.0, 0.0, 0.0],
+            [3.0, 4.0, 1.0, 2.0, 0.0, 0.0],
+            [5.0, 6.0, 3.0, 4.0, 1.0, 2.0],
+        ]
+    )
+    torch.testing.assert_close(extended, expected)
+
+
+def test_extend_supports_factors_longer_than_the_signal():
+    signal = torch.tensor([[1.0], [2.0]])
+
+    extended = extend(signal, factor=4)
+
+    expected = torch.tensor([[1.0, 0.0, 0.0, 0.0], [2.0, 1.0, 0.0, 0.0]])
+    torch.testing.assert_close(extended, expected)
+
+
+def test_whiten_rejects_unknown_method():
+    with pytest.raises(ValueError, match="Unsupported whitening method"):
+        whiten(torch.eye(2), method="unknown")
 
 
 @pytest.mark.parametrize("config_name", ["default", "surface", "intramuscular"])
@@ -158,7 +190,9 @@ def test_preprocessing_snapshot_defaults_bad_channels_to_empty_list():
 
 
 @pytest.mark.parametrize("save_data", [True, False])
-def test_train_attaches_signal_as_loaded_only_when_enabled(monkeypatch, tmp_path, save_data):
+def test_train_attaches_signal_as_loaded_only_when_enabled(
+    monkeypatch, tmp_path, save_data
+):
     train_module = importlib.import_module("scd.train")
     path = tmp_path / "data.npy"
     raw = np.random.default_rng(0).standard_normal((100, 4)).astype(np.float32)

@@ -26,3 +26,12 @@ __pycache__/
 
 # Ignore venv folder
 venv/
+.venv/
+
+# Development tool caches
+.pytest_cache/
+.ruff_cache/
+.tool-cache/
+.uv-cache/
+.uv-tools/
+.test-tmp*/

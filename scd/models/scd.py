@@ -1,30 +1,30 @@
 """The main function for running swarm contrastive decomposition"""
 
-from typing import Optional, List, Tuple, Dict
+from collections.abc import Callable
+from typing import Any, Literal
+
 import torch
 
-from scd.config.structures import Config, Data
-from scd.processing.preprocess import (
-    whiten,
-    autocorrelation_whiten,
-    extend,
-    time_differentiate,
-    notch_filter,
-    low_pass_filter,
-    high_pass_filter,
-    recommended_extension_factor,
-)
+from scd.config.structures import Config, Data, set_random_seed
 from scd.models.timestamping import (
-    source_to_timestamps,
-    spike_triggered_average,
-    peel_off_source,
-    find_quality_metric,
     bootstrapped_coeff_var,
     calculate_firing_rates,
+    find_quality_metric,
+    peel_off_source,
+    source_to_timestamps,
+    spike_triggered_average,
 )
-
+from scd.processing.preprocess import (
+    autocorrelation_whiten,
+    extend,
+    high_pass_filter,
+    low_pass_filter,
+    notch_filter,
+    recommended_extension_factor,
+    time_differentiate,
+    whiten,
+)
 from scd.utils.plotting import plot_accepted_source, plot_sources
-from scd.config.structures import set_random_seed
 
 set_random_seed(seed=42)
 
@@ -34,32 +34,38 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
     Class implementing a swarm contrastive decomposition
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
-        self.source_callback = None
+        self.source_callback: Callable[..., None] | None = None
+        self.config: Config
+        self.data: Data
+        self.decomp: dict[str, Any]
+        self.w_mat: torch.Tensor
+        self.exponents_list: list[Any]
+        self.best_exp_idx_list: list[torch.Tensor]
 
-    def _capture_preprocessing_config(self):
+    def _capture_preprocessing_config(self) -> None:
         """Snapshot the preprocessing parameters into decomp for later replay."""
         self.decomp["preprocessing_config"] = {
-            "notch_params":           self.config.notch_params,
-            "low_pass_cutoff":        self.config.low_pass_cutoff,
-            "high_pass_cutoff":       self.config.high_pass_cutoff,
-            "time_differentiate":     self.config.time_differentiate,
-            "extension_factor":       self.config.extension_factor,
-            "whitening_method":       self.config.whitening_method,
+            "notch_params": self.config.notch_params,
+            "low_pass_cutoff": self.config.low_pass_cutoff,
+            "high_pass_cutoff": self.config.high_pass_cutoff,
+            "time_differentiate": self.config.time_differentiate,
+            "extension_factor": self.config.extension_factor,
+            "whitening_method": self.config.whitening_method,
             "autocorrelation_whiten": self.config.autocorrelation_whiten,
-            "sampling_frequency":     self.config.sampling_frequency,
-            "peel_off_window_size":   self.config.peel_off_window_size,
-            "adapt_clamp":            self.config.adapt_clamp,
-            "edge_mask_size":         self.config.edge_mask_samples,
+            "sampling_frequency": self.config.sampling_frequency,
+            "peel_off_window_size": self.config.peel_off_window_size,
+            "adapt_clamp": self.config.adapt_clamp,
+            "edge_mask_size": self.config.edge_mask_samples,
             "square_sources_spike_det": self.config.square_sources_spike_det,
             # What preprocess_data did to the signal before it reached run():
             # lets an editor holding the signal as loaded (decomp["data"])
             # reproduce the slice and bad-channel fill exactly.
-            "bad_channels":           list(self.config.bad_channels or []),
-            "start_time":             self.config.start_time,
-            "end_time":               self.config.end_time,
+            "bad_channels": list(self.config.bad_channels or []),
+            "start_time": self.config.start_time,
+            "end_time": self.config.end_time,
         }
 
     def preprocess_emg(self, emg: torch.Tensor) -> torch.Tensor:
@@ -67,35 +73,29 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
         # First apply a notch filter
         if self.config.notch_params is not None:
-            assert (
-                self.config.sampling_frequency is not None
-            ), "Sampling frequency must be set in config if filtering."
+            sampling_frequency = self.config.require_sampling_frequency()
             emg = notch_filter(
                 emg,
-                self.config.sampling_frequency,
+                sampling_frequency,
                 self.config.notch_params,
                 self.config.low_pass_cutoff,
             )
 
         # Then a low pass
         if self.config.low_pass_cutoff is not None:
-            assert (
-                self.config.sampling_frequency is not None
-            ), "Sampling frequency must be set in config if filtering."
+            sampling_frequency = self.config.require_sampling_frequency()
             emg = low_pass_filter(
                 emg,
-                self.config.sampling_frequency,
+                sampling_frequency,
                 self.config.low_pass_cutoff,
             )
 
         # Finally a high pass
         if self.config.high_pass_cutoff is not None:
-            assert (
-                self.config.sampling_frequency is not None
-            ), "Sampling frequency must be set in config if filtering."
+            sampling_frequency = self.config.require_sampling_frequency()
             emg = high_pass_filter(
                 emg,
-                self.config.sampling_frequency,
+                sampling_frequency,
                 self.config.high_pass_cutoff,
             )
 
@@ -104,14 +104,17 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             emg = time_differentiate(emg)
 
         # Extend the emg to approx an instantaneous source separation problem
-        emg = extend(emg, self.config.extension_factor)
+        extension_factor = self.config.extension_factor
+        if extension_factor is None:
+            raise RuntimeError("extension_factor must be resolved before preprocessing")
+        emg = extend(emg, extension_factor)
 
         # Finally decorrelate the extended emg
         emg, self.w_mat = whiten(emg, self.config.whitening_method, return_matrix=True)
 
         if self.config.autocorrelation_whiten:
             emg = autocorrelation_whiten(
-                emg, self.config.extension_factor, self.config.whitening_method
+                emg, extension_factor, self.config.whitening_method
             )
 
         # Return the emg shape if in verbose mode
@@ -129,21 +132,23 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         # Clamp sources to avoid outlying spikes
         if self.config.adapt_clamp:
             for s in range(sources.shape[1]):
-                if self.data.personal_best['spike_outliers'][s]:
-                    thr = self.data.personal_best['spike_heights'][s]
-                    mu = self.data.personal_best['spike_means'][s]
-                    std = self.data.personal_best['spike_stds'][s]
+                if self.data.personal_best["spike_outliers"][s]:
+                    thr = self.data.personal_best["spike_heights"][s]
+                    mu = self.data.personal_best["spike_means"][s]
+                    std = self.data.personal_best["spike_stds"][s]
                     if torch.isnan(std):
                         std = 0.5
-                    sources[sources[:,s] > thr, s] = mu + torch.randn_like(sources[sources[:,s] > thr, s]) * std
+                    sources[sources[:, s] > thr, s] = (
+                        mu + torch.randn_like(sources[sources[:, s] > thr, s]) * std
+                    )
                 else:
-                    sources[sources[:,s] > 30, s] = 30
+                    sources[sources[:, s] > 30, s] = 30
         else:
             sources = sources.clamp(max=30)
 
         return sources
 
-    def ica_step(self):
+    def ica_step(self) -> torch.Tensor:
         """Calculate ICA loss with nonlinearity"""
 
         self.data.ica_optimiser.zero_grad()
@@ -155,7 +160,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         loss = -torch.stack(
             [
                 s.sign() * s.abs().pow(e)
-                for s, e in zip(sources.t(), self.data.exponents)
+                for s, e in zip(sources.t(), self.data.exponents, strict=True)
             ],
             1,
         ).mean()
@@ -166,7 +171,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
         return loss.detach()
 
-    def run_ica(self):
+    def run_ica(self) -> None:
         """Runs a single source independent component analysis"""
 
         patience = 0
@@ -190,7 +195,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         """
 
         # First decay the inertia
-        self.data.swarm_inertia = max(
+        self.data.swarm_inertia = torch.clamp_min(
             self.data.swarm_inertia * self.config.swarm_inertia_decay,
             self.config.minimum_swarm_inertia,
         )
@@ -201,7 +206,9 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             self.data.global_best["fitness"] = fitness.max()
 
         # Update the personal bests if better
-        for idx, [sil, exp] in enumerate(zip(fitness, self.data.exponents)):
+        for idx, (sil, exp) in enumerate(
+            zip(fitness, self.data.exponents, strict=True)
+        ):
             if sil > self.data.personal_best["fitness"][idx]:
                 self.data.personal_best["exponents"][idx] = exp
                 self.data.personal_best["fitness"][idx] = sil
@@ -237,14 +244,14 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
     def calculate_timestamps(
         self, sources: torch.Tensor, min_peak_separation: int
-    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
         """Find the timestamps with a two class k means/median clustering.
         and aggregate. Calculates a fitness function for the swarm."""
 
         # Square sources for spike detection if specified in config
         if self.config.square_sources_spike_det:
-            sources = sources ** 2
-        
+            sources = sources**2
+
         # Calculate timestamps from k means with associated silhouettes
         timestamps, spike_heights, silhouettes = zip(
             *[
@@ -259,17 +266,18 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                     else [torch.tensor(0).type_as(s)] * 3
                 )
                 for s in sources.t()
-            ]
+            ],
+            strict=True,
         )
 
-        return timestamps, spike_heights, silhouettes
+        return list(timestamps), list(spike_heights), list(silhouettes)
 
     def reset_swarm_and_ica(self) -> None:
         """Does a swarm update and then resets the ICA parameters with STA"""
 
         # First get the timestamps and silhouettes
         sources = self.calculate_sources()
-        timestamps, spike_heights, silhouettes = self.calculate_timestamps(
+        timestamps, _spike_heights, silhouettes = self.calculate_timestamps(
             sources, self.config.reset_peak_separation
         )
 
@@ -277,7 +285,6 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         if self.config.use_coeff_var_fitness:
             fitness = []
             for t in timestamps:
-
                 if t.numel() < 2:
                     fitness.append(torch.tensor(0).type_as(t))
                 else:
@@ -300,8 +307,9 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                     if t.nelement() > self.config.min_peaks_in_source
                     else [torch.zeros_like(f)] * 2
                 )
-                for t, f, s in zip(timestamps, fitness, silhouettes)
-            ]
+                for t, f, s in zip(timestamps, fitness, silhouettes, strict=True)
+            ],
+            strict=True,
         )
 
         # Convert fitness to tensor
@@ -318,12 +326,15 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             self.swarm_step(fitness)
         else:
             # Use fixed exponent for all sources
+            if self.config.fixed_exponent is None:
+                raise ValueError("fixed_exponent must be set when swarm is disabled")
             self.data.exponents = torch.full_like(
-                self.data.exponents, 
-                float(self.config.fixed_exponent)
+                self.data.exponents, float(self.config.fixed_exponent)
             )
             # Store in exponents list for tracking
-            self.exponents_list.append(self.data.exponents.detach().cpu().numpy().copy())
+            self.exponents_list.append(
+                self.data.exponents.detach().cpu().numpy().copy()
+            )
             self.best_exp_idx_list.append(torch.tensor(0))
 
         # Use the timestamps with the best fitness to update the weights by STA
@@ -364,7 +375,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 [history, self.data.global_best["fitness"].unsqueeze(0)]
             )
 
-    def initialise_dictionary(self):
+    def initialise_dictionary(self) -> None:
         # Initialise empty dictionary to store results
         self.decomp = {
             "silhouettes": [],
@@ -388,7 +399,7 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
             "preprocessing_config": {},
         }
 
-    def _peel_and_record(self, peel: bool, accepted_unit_idx):
+    def _peel_and_record(self, peel: bool, accepted_unit_idx: int | None) -> None:
         """Record peel provenance then apply the peel.
 
         Args:
@@ -400,12 +411,16 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
         """
         if peel and self.config.peel_off:
             ts = self.data.global_best["timestamps"]
+            if ts is None:
+                raise RuntimeError("Cannot peel a source without timestamps")
 
             # Record provenance before mutating self.data.emg
-            self.decomp["peel_off_sequence"].append({
-                "timestamps":        ts.detach().cpu().numpy().copy(),
-                "accepted_unit_idx": accepted_unit_idx,
-            })
+            self.decomp["peel_off_sequence"].append(
+                {
+                    "timestamps": ts.detach().cpu().numpy().copy(),
+                    "accepted_unit_idx": accepted_unit_idx,
+                }
+            )
 
             self.data.emg = peel_off_source(
                 self.data.emg,
@@ -416,9 +431,9 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
     def run(
         self,
         emg: torch.Tensor,
-        config=None,
-        source_callback=None,
-    ):
+        config: Config | None = None,
+        source_callback: Callable[..., None] | None = None,
+    ) -> tuple[list[torch.Tensor], dict[str, Any]]:
         """Sets optimiser and runs swarm contrastive decomposition."""
 
         self.initialise_dictionary()
@@ -437,6 +452,8 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 print(f"Extension factor: {self.config.extension_factor}")
 
         if not self.config.swarm:
+            if self.config.fixed_exponent is None:
+                raise ValueError("fixed_exponent must be set when swarm is disabled")
             starting_exponents = [float(self.config.fixed_exponent)]
         else:
             starting_exponents = self.config.starting_exponents
@@ -457,24 +474,29 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
 
         # Finally run swarm contrastive decomposition with source checking
         patience = 0
-        library  = []
+        library: list[torch.Tensor] = []
+        sampling_frequency = self.config.require_sampling_frequency()
         for iteration in range(self.config.max_iterations):
             # First run a swarm contrastive decomposition for a single source
-            self.exponents_list      = []
-            self.best_exp_idx_list   = []
+            self.exponents_list = []
+            self.best_exp_idx_list = []
 
             self.scd_step()
 
             # Categorise the source as good, bad or repeat
+            best_silhouette = self.data.global_best["silhouette"]
+            best_timestamps = self.data.global_best["timestamps"]
+            source_type: Literal["good", "repeat", "bad"]
             if (
-                (self.data.global_best["silhouette"] is not None)
-                and (self.data.global_best["silhouette"] > self.config.acceptance_silhouette)
+                best_silhouette is not None
+                and best_timestamps is not None
+                and best_silhouette > self.config.acceptance_silhouette
             ):
                 # Find the highest rates of agreement with found sources
                 max_roa = (
                     max(
                         find_quality_metric(
-                            self.data.global_best["timestamps"],
+                            best_timestamps,
                             t,
                             "roa",
                             self.config.roa_tolerance,
@@ -491,71 +513,71 @@ class SwarmContrastiveDecomposition(torch.nn.Module):
                 )
 
                 fr = calculate_firing_rates(
-                    self.data.global_best["timestamps"],
+                    best_timestamps,
                     window_size_in_seconds=1,
-                    fsamp2=self.config.sampling_frequency,
+                    fsamp2=sampling_frequency,
                 )
                 if self.config.remove_bad_fr and (fr < 2 or fr > 100):
                     source_type = "bad"
             else:
                 source_type = "bad"
 
-            # ── Handle accepted / repeat / bad 
+            # ── Handle accepted / repeat / bad
             if source_type == "good":
                 patience = 0
-                message  = str(iteration) + ": accept new source."
-                peel     = True
+                message = str(iteration) + ": accept new source."
+                peel = True
 
+                source = self.data.global_best["source"]
                 timestamps = self.data.global_best["timestamps"]
+                silhouette = self.data.global_best["silhouette"]
+                if source is None or timestamps is None or silhouette is None:
+                    raise RuntimeError(
+                        "Accepted source is missing decomposition results"
+                    )
                 library.append(timestamps)
 
                 if self.source_callback:
                     self.source_callback(
-                        source=self.data.global_best["source"].detach().cpu(),
+                        source=source.detach().cpu(),
                         timestamps=timestamps.detach().cpu(),
                         iteration=iteration,
-                        silhouette=self.data.global_best["silhouette"].item(),
+                        silhouette=silhouette.item(),
                     )
 
                 if self.config.output_final_source_plot:
-                    plot_accepted_source(self.data.global_best["source"], timestamps)
+                    plot_accepted_source(source, timestamps)
 
-                self.decomp["silhouettes"].append(self.data.global_best["silhouette"])
+                self.decomp["silhouettes"].append(silhouette)
                 self.decomp["timestamps"].append(timestamps)
                 self.decomp["fr"].append(
                     calculate_firing_rates(
                         timestamps,
                         window_size_in_seconds=1,
-                        fsamp2=self.config.sampling_frequency,
+                        fsamp2=sampling_frequency,
                     )
                 )
                 self.decomp["cov"].append(bootstrapped_coeff_var(timestamps))
-                self.decomp["best_exp"].append(
-                    self.exponents_list[-1][self.best_exp_idx_list[-1].item()]
-                )
+                best_idx = int(self.best_exp_idx_list[-1].item())
+                self.decomp["best_exp"].append(self.exponents_list[-1][best_idx])
                 self.decomp["filters"].append(
-                    self.data.ica_weights.detach()
-                    .cpu()
-                    .numpy()
-                    .copy()[:, [self.best_exp_idx_list[-1].item()]]
+                    self.data.ica_weights.detach().cpu().numpy().copy()[:, [best_idx]]
                 )
-                self.decomp["source"].append(
-                    self.data.global_best["source"].detach().cpu().numpy().copy()
-                )
+                self.decomp["source"].append(source.detach().cpu().numpy().copy())
 
                 # Index of this unit in decomp["timestamps"] (just appended above)
                 accepted_unit_idx = len(self.decomp["timestamps"]) - 1
 
             elif source_type == "repeat":
-                patience         += 1
-                message           = str(iteration) + ": reject repeat source."
-                peel              = True if self.config.peel_off_repeats else False
-                accepted_unit_idx = None   # repeat — no entry in results
+                patience += 1
+                message = str(iteration) + ": reject repeat source."
+                peel = bool(self.config.peel_off_repeats)
+                accepted_unit_idx = None  # repeat — no entry in results
 
-            elif source_type == "bad":
-                patience         += 1
-                message           = str(iteration) + ": reject low silhouette source."
-                peel              = False
+            else:
+                patience += 1
+                message = str(iteration) + ": reject low silhouette source."
+                peel = False
                 accepted_unit_idx = None
 
             # ── Peel off (records provenance + mutates self.data.emg)

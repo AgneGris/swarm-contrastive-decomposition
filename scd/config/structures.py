@@ -1,11 +1,30 @@
 """Dataclass structure for configuration and model data containers"""
 
-from typing import Optional, Sequence, Tuple
-from dataclasses import dataclass
-
-import torch
 import random
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import TypedDict
+
 import numpy as np
+import torch
+
+
+class PersonalBest(TypedDict):
+    exponents: torch.Tensor
+    silhouettes: torch.Tensor
+    fitness: torch.Tensor
+    spike_heights: torch.Tensor
+    spike_means: torch.Tensor
+    spike_stds: torch.Tensor
+    spike_outliers: torch.Tensor
+
+
+class GlobalBest(TypedDict):
+    exponents: torch.Tensor
+    fitness: torch.Tensor
+    source: torch.Tensor | None
+    timestamps: torch.Tensor | None
+    silhouette: torch.Tensor | None
 
 
 def set_random_seed(seed: int) -> None:
@@ -32,17 +51,17 @@ class Config:
     end_time: int = -1
 
     # EMG preprocessing parameters
-    sampling_frequency: Optional[int] = None
-    time_differentiate: Optional[bool] = None
-    notch_params: Optional[Tuple[int, float, bool]] = (
+    sampling_frequency: int | None = None
+    time_differentiate: bool | None = None
+    notch_params: tuple[int, float, bool] | None = (
         None  # powerline frequency, bandwidth, harmonics
     )
-    low_pass_cutoff: Optional[int] = None
-    high_pass_cutoff: Optional[int] = None
-    extension_factor: Optional[int] = None  # None -> derived as 1000 / kept channels
+    low_pass_cutoff: int | None = None
+    high_pass_cutoff: int | None = None
+    extension_factor: int | None = None  # None -> derived as 1000 / kept channels
     whitening_method: str = "zca"
     autocorrelation_whiten: bool = False
-    bad_channels: Optional[Sequence[int]] = None
+    bad_channels: Sequence[int] | None = None
 
     # Main run parameters
     max_iterations: int = 250
@@ -61,11 +80,11 @@ class Config:
     ica_learning_rate: float = 0.001
     ica_momentum: float = 0.9
     edge_mask_size_ms: float = 19.5  # ms — converted to samples via property
-    edge_mask_size: Optional[int] = None  # legacy override in samples; wins if set
+    edge_mask_size: int | None = None  # legacy override in samples; wins if set
 
     # Swarm parameters
     swarm: bool = True
-    fixed_exponent: Optional[float] = None
+    fixed_exponent: float | None = None
     max_swarm_steps: int = 100
     swarm_patience: int = 10
     starting_exponents: Sequence[float] = (2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
@@ -97,28 +116,38 @@ class Config:
     output_source_plot: bool = False
     output_final_source_plot: bool = False
     verbose_mode: bool = True
-    device: Optional[str] = None
-    electrode: Optional[Sequence] = None
+    device: str | None = None
+    electrode: object | None = None
 
     def __post_init__(self) -> None:
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    def require_sampling_frequency(self) -> int:
+        """Return the sampling frequency or fail with a useful message."""
+        if self.sampling_frequency is None:
+            raise ValueError("sampling_frequency must be set for this operation")
+        return self.sampling_frequency
+
     @property
     def peel_off_window_size(self) -> int:
-        return int(self.peel_off_window_size_ms * self.sampling_frequency / 1000)
+        return int(
+            self.peel_off_window_size_ms * self.require_sampling_frequency() / 1000
+        )
 
     @property
     def reset_peak_separation(self) -> int:
-        return int(self.reset_peak_separation_ms * self.sampling_frequency / 1000)
+        return int(
+            self.reset_peak_separation_ms * self.require_sampling_frequency() / 1000
+        )
 
     @property
     def roa_tolerance(self) -> int:
-        return int(self.roa_tolerance_ms * self.sampling_frequency / 1000)
+        return int(self.roa_tolerance_ms * self.require_sampling_frequency() / 1000)
 
     @property
     def roa_max_shift(self) -> int:
-        return int(self.roa_max_shift_ms * self.sampling_frequency / 1000)
+        return int(self.roa_max_shift_ms * self.require_sampling_frequency() / 1000)
 
     @property
     def edge_mask_samples(self) -> int:
@@ -129,35 +158,31 @@ class Config:
         """
         if self.edge_mask_size is not None:
             return self.edge_mask_size
-        return round(self.edge_mask_size_ms * self.sampling_frequency / 1000)
+        return round(self.edge_mask_size_ms * self.require_sampling_frequency() / 1000)
 
 
 @dataclass
 class Data:
     emg: torch.Tensor
-    starting_exponents: Optional[Sequence[float]] = None
+    starting_exponents: Sequence[float] | None = None
     ica_learning_rate: float = 0.1
     ica_momentum: float = 0.9
     edge_mask_size: int = 200
-    electrode: Optional[torch.Tensor] = None
+    electrode: object | None = None
 
-    def __post_init__(self):
+    edge_mask: torch.Tensor = field(init=False)
+    ica_weights: torch.nn.Parameter = field(init=False)
+    global_best: GlobalBest = field(init=False)
+    personal_best: PersonalBest = field(init=False)
+    swarm_inertia: torch.Tensor = field(init=False)
+    exponents: torch.Tensor = field(init=False)
+    swarm_velocities: torch.Tensor = field(init=False)
+    ica_optimiser: torch.optim.Optimizer = field(init=False)
+
+    def __post_init__(self) -> None:
         self.init_all()
 
-    def init_all(self):
-        """Initalise all variables except emg"""
-        self.edge_mask = None
-        self.ica_weights = None
-        self.global_best = None
-        self.personal_best = None
-        self.swarm_inertia = None
-        self.exponents = None
-        self.swarm_velocities = None
-        self.ica_optimiser = None
-
-        self.init_all()
-
-    def init_all(self):
+    def init_all(self) -> None:
         """Initialise all variables except the EMG data"""
 
         self.init_swarm()
@@ -165,7 +190,7 @@ class Data:
         self.init_optimiser()
         self.init_edge_mask()
 
-    def init_swarm(self):
+    def init_swarm(self) -> None:
         """Initialise the variables associated with the swarm particles"""
 
         # The exponents are the current positions of the particle swarm
@@ -198,7 +223,7 @@ class Data:
             "silhouette": None,
         }
 
-    def init_weights(self):
+    def init_weights(self) -> None:
         """Initialise the gradient descent ICA separation vector"""
 
         mean = torch.zeros([self.emg.shape[1], 1]).type_as(self.emg)
@@ -208,7 +233,7 @@ class Data:
             weights.tile([1, self.exponents.shape[0]])
         )
 
-    def init_optimiser(self):
+    def init_optimiser(self) -> None:
         """Initialise the gradient descent ICA optimiser"""
 
         self.ica_optimiser = torch.optim.SGD(
@@ -217,7 +242,7 @@ class Data:
             momentum=self.ica_momentum,
         )
 
-    def init_edge_mask(self):
+    def init_edge_mask(self) -> None:
         """Initialise a mask to prevent edge effects during optimisation"""
 
         zeros = torch.zeros([self.edge_mask_size, self.exponents.shape[0]])

@@ -1,5 +1,6 @@
 from pathlib import Path
-from scd import train, save_results
+
+from scd import save_results, train
 
 # === Configuration ===
 DATA_FILE = "emg.mat"
