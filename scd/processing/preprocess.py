@@ -211,9 +211,18 @@ def extend(x: torch.Tensor, factor: int) -> torch.Tensor:
     # Pad end with zeros to stop torch.roll moving end samples to start
     x = torch.concat([torch.zeros([factor, x.shape[1]]).type_as(x), x])
 
-    # Perform extension and return with rolled values removed
-    x = torch.concat([x.roll(shift, 0) for shift in range(factor)], 1)
-    return x[factor:]
+    # Perform extension and return with rolled values removed (pre-allocated to avoid peak of memory usage)
+    n_samples, n_channels = x.shape
+    x_extended = torch.empty(
+        (n_samples, factor * n_channels),
+        device=x.device,
+        dtype=x.dtype,
+    )
+    for shift in range(factor):
+        x_extended[
+            :, shift * n_channels : (shift + 1) * n_channels
+        ] = x.roll(shift, 0)
+    return x_extended[factor:]
 
 
 def whiten(x: torch.Tensor, method: str = "zca", return_matrix: bool = False) -> torch.Tensor:
